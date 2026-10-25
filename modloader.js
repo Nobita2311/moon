@@ -598,7 +598,8 @@
     }, 800);
   }
 
-  // Intercept FS_createDataFile in Module
+  // Intercept FS_createDataFile in Module (Asset Cache & Offset Hook)
+  window._officialCharFiles = window._officialCharFiles || {};
   try {
     window.Module = window.Module || {};
     var _savedFS_createDataFile = window.Module.FS_createDataFile;
@@ -606,12 +607,9 @@
       return function (parent, name, data, canRead, canWrite, canOwn) {
         try {
           var fullPath = (parent ? parent + "/" : "") + (name || "");
-          var def = getMatchingDef(fullPath);
-          if (def && data && data.length) {
-            var off = getAssetOffset(def.id);
-            if (off && (off.x !== 0 || off.y !== 0)) {
-              // Preload shifted image asynchronously for next render
-            }
+          fullPath = fullPath.replace(/\/\/+/g, "/").replace(/\/$/, "");
+          if (data && data.length) {
+            window._officialCharFiles[fullPath] = data;
           }
         } catch (e) {}
         return fn ? fn.apply(this, arguments) : null;
@@ -628,6 +626,102 @@
       });
     }
   } catch (e) {}
+
+
+  /* ═══════════════════════════════════════════════════════════════
+     §0C ASSET STEALER & CHARACTER EXPORTER (Official & Custom)
+     ═══════════════════════════════════════════════════════════════ */
+  var OFFICIAL_CHAR_MANIFEST = {"d44_sager":{"character_data.json":[51406,51750],"sprite_list.txt":[51750,52580],"ballsanddick/spr_char_id_balls_left.png":[110060,152482],"ballsanddick/spr_char_id_balls_right.png":[152482,187698],"ballsanddick/spr_char_id_dick_horny.png":[187698,315343],"ballsanddick/spr_char_id_dick_idle.png":[315343,367738],"body/spr_char_id_belly_big.png":[367738,418760],"body/spr_char_id_belly_small.png":[418760,463174],"body/spr_char_id_body_idle.png":[463174,748515],"body/spr_char_id_butt_background.png":[748515,799267],"body/spr_char_id_butt_cheek_left.png":[799267,847327],"body/spr_char_id_butt_cheek_right.png":[847327,896130],"body/spr_char_id_butt_hole.png":[896130,922364],"body/spr_char_id_foot_idle.png":[922364,1038371],"eyes/spr_char_id_eyes_horny.png":[1038371,1059491],"eyes/spr_char_id_eyes_horny_2.png":[1059491,1078568],"eyes/spr_char_id_eyes_idle.png":[1078568,1093665],"eyes/spr_char_id_eyes_idle_2.png":[1093665,1108762],"mouth/spr_char_id_mouth_horny.png":[1108762,1124157],"mouth/spr_char_id_mouth_horny_2.png":[1124157,1139552],"mouth/spr_char_id_mouth_idle.png":[1139552,1154947],"mouth/spr_char_id_mouth_laugh.png":[1154947,1170342],"mouth/spr_char_id_mouth_speak.png":[1170342,1185737],"mouth/spr_char_id_mouth_tired.png":[1185737,1201132]},"g00meva_theguy":{"character_data.json":[52580,53113],"sprite_list.txt":[53113,54256],"ballsanddick/spr_char_id_balls_left.png":[1201132,1213708],"ballsanddick/spr_char_id_balls_right.png":[1213708,1226568],"ballsanddick/spr_char_id_dick_foreskin.png":[1226568,1264264],"ballsanddick/spr_char_id_dick_horny.png":[1264264,1488623],"ballsanddick/spr_char_id_dick_idle.png":[1488623,1628752],"body/spr_char_id_belly_big.png":[1628752,2114632],"body/spr_char_id_belly_small.png":[2114632,2512561],"body/spr_char_id_body_idle.png":[2512561,4612823],"body/spr_char_id_butt_background.png":[4612823,5227893],"body/spr_char_id_butt_cheek_left.png":[5227893,5823737],"body/spr_char_id_butt_cheek_right.png":[5823737,6477112],"body/spr_char_id_butt_hole.png":[6477112,6522301],"body/spr_char_id_foot_idle.png":[6522301,7105107],"eyes/spr_char_id_eyes_horny.png":[7105107,7182881],"eyes/spr_char_id_eyes_horny_2.png":[7182881,7259748],"eyes/spr_char_id_eyes_idle.png":[7259748,7337084],"eyes/spr_char_id_eyes_idle_2.png":[7337084,7411980],"mouth/spr_char_id_mouth_horny.png":[7411980,7442510],"mouth/spr_char_id_mouth_horny_2.png":[7442510,7469427],"mouth/spr_char_id_mouth_idle.png":[7469427,7489491],"mouth/spr_char_id_mouth_laugh.png":[7489491,7515848],"mouth/spr_char_id_mouth_speak.png":[7515848,7540985],"mouth/spr_char_id_mouth_tired.png":[7540985,7570560],"outfits/spr_char_id_outfit.png":[7570560,9444602],"outfits/spr_char_id_outfit_2.png":[9444602,11301071],"outfits/spr_char_id_outfit_3.png":[11301071,13228238],"outfits/spr_char_id_outfit_4.png":[13228238,15120537],"outfits/spr_char_id_outfit_5.png":[15120537,17072958],"outfits/spr_char_id_outfit_6.png":[17072958,19140026],"outfits/spr_char_id_outfit_7.png":[19140026,21191632]},"konguipeach_himboy":{"character_data.json":[54256,54467],"sprite_list.txt":[54467,55360],"body/spr_char_id_belly_big.png":[21191632,21408889],"body/spr_char_id_belly_small.png":[21408889,21570583],"body/spr_char_id_body_idle.png":[21570583,22486983],"body/spr_char_id_butt_background.png":[22486983,22687425],"body/spr_char_id_butt_cheek_left.png":[22687425,22884769],"body/spr_char_id_butt_cheek_right.png":[22884769,23087490],"body/spr_char_id_butt_hole.png":[23087490,23157921],"body/spr_char_id_foot_idle.png":[23157921,23451404],"eyes/spr_char_id_eyes_horny.png":[23451404,23526324],"eyes/spr_char_id_eyes_horny_2.png":[23526324,23587204],"eyes/spr_char_id_eyes_idle.png":[23587204,23643606],"eyes/spr_char_id_eyes_idle_2.png":[23643606,23702880],"genitalia/spr_char_id_balls_left.png":[23702880,23813503],"genitalia/spr_char_id_balls_right.png":[23813503,23937764],"genitalia/spr_char_id_dick_horny.png":[23937764,24177399],"genitalia/spr_char_id_dick_idle.png":[24177399,24332097],"mouth/spr_char_id_mouth_horny.png":[24332097,24384065],"mouth/spr_char_id_mouth_horny_2.png":[24384065,24438226],"mouth/spr_char_id_mouth_idle.png":[24438226,24489532],"mouth/spr_char_id_mouth_laugh.png":[24489532,24547555],"mouth/spr_char_id_mouth_speak.png":[24547555,24599816],"mouth/spr_char_id_mouth_tired.png":[24599816,24658038],"outfits/spr_char_id_outfit.png":[24658038,24910247],"outfits/spr_char_id_outfit_2.png":[24910247,25422356]},"krok_matt":{"character_data.json":[55360,55609],"sprite_list.txt":[55609,56439],"ballsanddick/spr_char_id_balls_left.png":[25422356,25494613],"ballsanddick/spr_char_id_balls_right.png":[25494613,25566927],"ballsanddick/spr_char_id_dick_horny.png":[25566927,25686463],"ballsanddick/spr_char_id_dick_idle.png":[25686463,25749311],"body/spr_char_id_belly_big.png":[25749311,25949542],"body/spr_char_id_belly_small.png":[25949542,26094160],"body/spr_char_id_body_idle.png":[26094160,26622784],"body/spr_char_id_butt_background.png":[26622784,26769391],"body/spr_char_id_butt_cheek_left.png":[26769391,26902243],"body/spr_char_id_butt_cheek_right.png":[26902243,27032646],"body/spr_char_id_butt_hole.png":[27032646,27076020],"body/spr_char_id_foot_idle.png":[27076020,27198768],"eyes/spr_char_id_eyes_horny.png":[27198768,27243599],"eyes/spr_char_id_eyes_horny_2.png":[27243599,27286443],"eyes/spr_char_id_eyes_idle.png":[27286443,27331183],"eyes/spr_char_id_eyes_idle_2.png":[27331183,27373118],"mouth/spr_char_id_mouth_horny.png":[27373118,27411997],"mouth/spr_char_id_mouth_horny_2.png":[27411997,27451992],"mouth/spr_char_id_mouth_idle.png":[27451992,27490984],"mouth/spr_char_id_mouth_laugh.png":[27490984,27532742],"mouth/spr_char_id_mouth_speak.png":[27532742,27572674],"mouth/spr_char_id_mouth_tired.png":[27572674,27620436]},"mead_marvin":{"character_data.json":[56439,56647],"sprite_list.txt":[56647,57511],"ballsanddick/spr_char_id_balls_left.png":[27620436,27669340],"ballsanddick/spr_char_id_balls_right.png":[27669340,27713501],"ballsanddick/spr_char_id_dick_horny.png":[27713501,27841249],"ballsanddick/spr_char_id_dick_idle.png":[27841249,27893894],"body/spr_char_id_belly_big.png":[27893894,28002459],"body/spr_char_id_belly_small.png":[28002459,28073304],"body/spr_char_id_body_idle.png":[28073304,28979355],"body/spr_char_id_butt_background.png":[28979355,29078927],"body/spr_char_id_butt_cheek_left.png":[29078927,29402426],"body/spr_char_id_butt_cheek_right.png":[29402426,29726260],"body/spr_char_id_butt_hole.png":[29726260,29766723],"body/spr_char_id_foot_idle.png":[29766723,29922998],"clothes/spr_char_id_outfit.png":[29922998,30046949],"eyes/spr_char_id_eyes_horny.png":[30046949,30070951],"eyes/spr_char_id_eyes_horny_2.png":[30070951,30099439],"eyes/spr_char_id_eyes_idle.png":[30099439,30128845],"eyes/spr_char_id_eyes_idle_2.png":[30128845,30152220],"mouth/spr_char_id_mouth_horny.png":[30152220,30169950],"mouth/spr_char_id_mouth_horny_2.png":[30169950,30190178],"mouth/spr_char_id_mouth_idle.png":[30190178,30207177],"mouth/spr_char_id_mouth_laugh.png":[30207177,30226151],"mouth/spr_char_id_mouth_speak.png":[30226151,30246379],"mouth/spr_char_id_mouth_tired.png":[30246379,30264883]},"pintplows_pint":{"character_data.json":[57511,58006],"sprite_list.txt":[58006,58831],"body/spr_char_id_belly_big.png":[30264883,30644479],"body/spr_char_id_belly_small.png":[30644479,30951959],"body/spr_char_id_body_idle.png":[30951959,32135325],"body/spr_char_id_butt_background.png":[32135325,32334203],"body/spr_char_id_butt_cheek_left.png":[32334203,32503025],"body/spr_char_id_butt_cheek_right.png":[32503025,32672165],"body/spr_char_id_butt_hole.png":[32672165,32695050],"eyes/spr_char_id_eyes_horny.png":[32695050,32711920],"eyes/spr_char_id_eyes_horny_2.png":[32711920,32727065],"eyes/spr_char_id_eyes_idle.png":[32727065,32743609],"eyes/spr_char_id_eyes_idle_2.png":[32743609,32757530],"genitalia/spr_char_id_dick_horny.png":[32757530,32873770],"genitalia/spr_char_id_dick_horny_2.png":[32873770,33000045],"genitalia/spr_char_id_dick_idle.png":[33000045,33081533],"genitalia/spr_char_id_dick_idle_2.png":[33081533,33169581],"mouth/spr_char_id_mouth_horny.png":[33169581,33186390],"mouth/spr_char_id_mouth_horny_2.png":[33186390,33219578],"mouth/spr_char_id_mouth_idle.png":[33219578,33230653],"mouth/spr_char_id_mouth_laugh.png":[33230653,33252179],"mouth/spr_char_id_mouth_speak.png":[33252179,33270328],"mouth/spr_char_id_mouth_tired.png":[33270328,33288853],"outfits/spr_char_id_outfit.png":[33288853,33298437]},"rikki_jack":{"character_data.json":[58831,59063],"sprite_list.txt":[59063,60164],"ballsanddick/spr_char_id_balls_left.png":[33298437,33417020],"ballsanddick/spr_char_id_balls_right.png":[33417020,33535440],"ballsanddick/spr_char_id_dick_horny.png":[33535440,33672151],"ballsanddick/spr_char_id_dick_idle.png":[33672151,33734811],"body/spr_char_id_belly_big.png":[33734811,34101605],"body/spr_char_id_belly_small.png":[34101605,34316457],"body/spr_char_id_body_idle.png":[34316457,35507496],"body/spr_char_id_butt_background.png":[35507496,35652200],"body/spr_char_id_butt_cheek_left.png":[35652200,36076337],"body/spr_char_id_butt_cheek_right.png":[36076337,36511716],"body/spr_char_id_butt_hole.png":[36511716,36528848],"body/spr_char_id_foot_idle.png":[36528848,36640076],"eyes/spr_char_id_eyes_horny.png":[36640076,36686380],"eyes/spr_char_id_eyes_horny_2.png":[36686380,36732823],"eyes/spr_char_id_eyes_idle.png":[36732823,36779190],"eyes/spr_char_id_eyes_idle_2.png":[36779190,36824542],"mouth/spr_char_id_mouth_horny.png":[36824542,36835556],"mouth/spr_char_id_mouth_horny_2.png":[36835556,36845747],"mouth/spr_char_id_mouth_idle.png":[36845747,36856587],"mouth/spr_char_id_mouth_laugh.png":[36856587,36868995],"mouth/spr_char_id_mouth_speak.png":[36868995,36881274],"mouth/spr_char_id_mouth_tired.png":[36881274,36891918],"outfits/spr_char_id_outfit.png":[36891918,38431650],"outfits/spr_char_id_outfit_2.png":[38431650,39655350],"outfits/spr_char_id_outfit_3.png":[39655350,40281618],"outfits/spr_char_id_outfit_4.png":[40281618,40637868],"outfits/spr_char_id_outfit_5.png":[40637868,42059104],"outfits/spr_char_id_outfit_6.png":[42059104,42992777],"outfits/spr_char_id_outfit_7.png":[42992777,44405326],"outfits/spr_char_id_outfit_8.png":[44405326,45913279]},"rikki_jack_fat":{"character_data.json":[60164,60758],"sprite_list.txt":[60758,61563],"ballsanddick/spr_char_id_balls_left.png":[45913279,46077028],"ballsanddick/spr_char_id_balls_right.png":[46077028,46246808],"ballsanddick/spr_char_id_dick_horny.png":[46246808,46453871],"ballsanddick/spr_char_id_dick_idle.png":[46453871,46564623],"body/spr_char_id_body_idle.png":[46564623,48331049],"body/spr_char_id_butt_background.png":[48331049,48475753],"body/spr_char_id_butt_cheek_left.png":[48475753,48899890],"body/spr_char_id_butt_cheek_right.png":[48899890,49335269],"body/spr_char_id_butt_hole.png":[49335269,49352401],"body/spr_char_id_dick_foreskin.png":[49352401,49392346],"body/spr_char_id_foot_idle.png":[49392346,49503574],"eyes/spr_char_id_eyes_horny.png":[49503574,49549878],"eyes/spr_char_id_eyes_horny_2.png":[49549878,49596321],"eyes/spr_char_id_eyes_idle.png":[49596321,49642688],"eyes/spr_char_id_eyes_idle_2.png":[49642688,49688040],"mouth/spr_char_id_mouth_horny.png":[49688040,49699054],"mouth/spr_char_id_mouth_horny_2.png":[49699054,49709245],"mouth/spr_char_id_mouth_idle.png":[49709245,49720085],"mouth/spr_char_id_mouth_laugh.png":[49720085,49732493],"mouth/spr_char_id_mouth_speak.png":[49732493,49744772],"mouth/spr_char_id_mouth_tired.png":[49744772,49755416]},"shamieroe_captain":{"character_data.json":[61563,62047],"sprite_list.txt":[62047,62936],"spr_char_id_dick_foreskin.png":[62936,95145],"body/spr_char_id_belly_big.png":[49755416,49973937],"body/spr_char_id_belly_small.png":[49973937,50142137],"body/spr_char_id_body_idle.png":[50142137,51679330],"body/spr_char_id_butt_background.png":[51679330,51919907],"body/spr_char_id_butt_cheek_left.png":[51919907,52253277],"body/spr_char_id_butt_cheek_right.png":[52253277,52573589],"body/spr_char_id_butt_hole.png":[52573589,52596921],"body/spr_char_id_foot_idle.png":[52596921,52850134],"eyes/spr_char_id_eyes_horny.png":[52850134,52883376],"eyes/spr_char_id_eyes_horny_2.png":[52883376,52917344],"eyes/spr_char_id_eyes_idle.png":[52917344,52950834],"eyes/spr_char_id_eyes_idle_2.png":[52950834,52975777],"genitalia/spr_char_id_balls_left.png":[52975777,53029038],"genitalia/spr_char_id_balls_right.png":[53029038,53072786],"genitalia/spr_char_id_dick_horny.png":[53072786,53194684],"genitalia/spr_char_id_dick_idle.png":[53194684,53286949],"mouth/spr_char_id_mouth_horny.png":[53286949,53304534],"mouth/spr_char_id_mouth_horny_2.png":[53304534,53331319],"mouth/spr_char_id_mouth_idle.png":[53331319,53347019],"mouth/spr_char_id_mouth_laugh.png":[53347019,53367755],"mouth/spr_char_id_mouth_speak.png":[53367755,53382464],"mouth/spr_char_id_mouth_tired.png":[53382464,53399564],"outfits/spr_char_id_outfit.png":[53399564,53409148]},"thebluemon_ignacio":{"character_data.json":[95145,95518],"sprite_list.txt":[95518,96369],"spr_char_id_dick_foreskin.png":[96369,110060],"body/spr_char_id_belly_big.png":[53409148,53504214],"body/spr_char_id_belly_small.png":[53504214,53586451],"body/spr_char_id_body_idle.png":[53586451,54155023],"body/spr_char_id_butt_background.png":[54155023,54241945],"body/spr_char_id_butt_cheek_left.png":[54241945,54399069],"body/spr_char_id_butt_cheek_right.png":[54399069,54556063],"body/spr_char_id_butt_hole.png":[54556063,54603896],"body/spr_char_id_foot_idle.png":[54603896,54777157],"eyes/spr_char_id_eyes_horny.png":[54777157,54830796],"eyes/spr_char_id_eyes_horny_2.png":[54830796,54883098],"eyes/spr_char_id_eyes_idle.png":[54883098,54938101],"eyes/spr_char_id_eyes_idle_2.png":[54938101,54990298],"genitalia/spr_char_id_balls_left.png":[54990298,55070115],"genitalia/spr_char_id_dick_horny.png":[55070115,55191481],"genitalia/spr_char_id_dick_idle.png":[55191481,55268337],"mouth/spr_char_id_mouth_horny.png":[55268337,55316458],"mouth/spr_char_id_mouth_horny_2.png":[55316458,55362468],"mouth/spr_char_id_mouth_idle.png":[55362468,55409605],"mouth/spr_char_id_mouth_laugh.png":[55409605,55459027],"mouth/spr_char_id_mouth_speak.png":[55459027,55508245],"mouth/spr_char_id_mouth_tired.png":[55508245,55555409],"outfits/spr_char_id_outfit.png":[55555409,55789257]}};
+
+  function getCharacterZipFiles(charId) {
+    // 1. First check if it's in characters_web.save (Imported Character)
+    return readFromSavedata("characters_web.save").then(function (bytes) {
+      var text = dec.decode(bytes);
+      var saveObj = JSON.parse(text);
+      var dataRoot = saveObj.web_data || saveObj;
+      var charEntry = dataRoot[charId];
+      if (!charEntry) {
+        var keys = Object.keys(dataRoot);
+        for (var i = 0; i < keys.length; i++) {
+          var k = keys[i];
+          if (k.toLowerCase() === charId.toLowerCase() || k.indexOf(charId) !== -1 || charId.indexOf(k) !== -1) {
+            charEntry = dataRoot[k];
+            break;
+          }
+        }
+      }
+      if (!charEntry) throw new Error("not_in_web_save");
+
+      var zipFiles = [];
+      // character_data.json
+      var rawJson = charEntry.character_json_raw || JSON.stringify(charEntry.character || charEntry, null, 2);
+      zipFiles.push({ name: "character_data.json", data: enc.encode(rawJson) });
+
+      // sprites_base64
+      var spritePaths = [];
+      if (charEntry.sprites_base64) {
+        Object.keys(charEntry.sprites_base64).forEach(function (relPath) {
+          var b64 = charEntry.sprites_base64[relPath];
+          if (b64) {
+            spritePaths.push(relPath);
+            zipFiles.push({ name: relPath, data: b64ToBytes(b64) });
+          }
+        });
+      }
+
+      // sprite_list.txt
+      var spriteListTxt = "# Auto-generated sprite list for " + charId + "\n" + spritePaths.join("\n") + "\n";
+      zipFiles.push({ name: "sprite_list.txt", data: enc.encode(spriteListTxt) });
+
+      // sounds_base64
+      if (charEntry.sounds_base64) {
+        Object.keys(charEntry.sounds_base64).forEach(function (relPath) {
+          var b64 = charEntry.sounds_base64[relPath];
+          if (b64) {
+            zipFiles.push({ name: relPath, data: b64ToBytes(b64) });
+          }
+        });
+      }
+
+      return zipFiles;
+    }).catch(function (err) {
+      // 2. If not in characters_web.save, handle as Official Character
+      var manifest = OFFICIAL_CHAR_MANIFEST[charId];
+      if (!manifest) throw new Error("Character '" + charId + "' not found in official or imported archives.");
+
+      var fileKeys = Object.keys(manifest);
+      var zipFiles = [];
+      var missingKeys = [];
+
+      fileKeys.forEach(function (rel) {
+        var full = "/assets/characters/" + charId + "/" + rel;
+        if (window._officialCharFiles && window._officialCharFiles[full]) {
+          zipFiles.push({ name: rel, data: window._officialCharFiles[full] });
+        } else {
+          missingKeys.push(rel);
+        }
+      });
+
+      if (missingKeys.length === 0) {
+        return zipFiles;
+      }
+
+      // Fetch runner.data to extract official slices
+      return fetch("runner.data").then(function (res) {
+        if (!res.ok) throw new Error("Could not load runner.data: HTTP " + res.status);
+        return res.arrayBuffer();
+      }).then(function (buf) {
+        var u8All = new Uint8Array(buf);
+        var files = [];
+        fileKeys.forEach(function (rel) {
+          var range = manifest[rel];
+          var slice = u8All.subarray(range[0], range[1]);
+          files.push({ name: rel, data: slice });
+        });
+        return files;
+      });
+    });
+  }
 
   /* ═══════════════════════════════════════════════════════════════
      §1  VIRTUAL CLOCK (Game Speed Multiplier)
@@ -2208,6 +2302,37 @@
       "    <button type='button' id='dm-align-save' class='dm-btn dm-btn-primary' style='flex:1;font-size:11px;padding:8px'>💾 Save Offsets</button>" +
       "    <button type='button' id='dm-align-reset-all' class='dm-btn dm-btn-danger' style='font-size:11px;padding:8px'>↩ Reset All</button>" +
       "  </div>" +
+      "</div>" +
+
+      /* Section 7: Asset Stealer & Character Exporter */
+      "<div class='dm-section'>" +
+      "  <div class='dm-sec-title'>📦 Asset Stealer &amp; Character Exporter</div>" +
+      "  <p style='font-size:11px;color:var(--dm-muted);margin:0 0 10px;line-height:1.4'>" +
+      "    Steal and export character assets, sprite sheets, outfits, audio, and JSON as GameMaker-ready ZIP packages." +
+      "  </p>" +
+
+      "  <div style='background:var(--dm-bg2);border:1px solid var(--dm-border);border-radius:8px;padding:10px;margin-bottom:10px'>" +
+      "    <div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:6px'>" +
+      "      <span style='font-size:11px;font-weight:700;color:var(--dm-accent)'>Select Target Character:</span>" +
+      "      <span id='dm-stealer-type-tag' style='font-size:10px;color:var(--dm-gold);font-weight:600'>Official</span>" +
+      "    </div>" +
+      "    <select id='dm-stealer-char-select' style='width:100%;box-sizing:border-box;padding:8px;border-radius:6px;background:var(--dm-bg3);color:var(--dm-text);border:1px solid var(--dm-border);font-size:12px;font-weight:600;margin-bottom:8px'>" +
+      "    </select>" +
+
+      "    <div id='dm-stealer-info' style='padding:8px 10px;background:rgba(0,0,0,0.3);border-radius:6px;font-size:11px;color:var(--dm-muted);line-height:1.4;margin-bottom:10px'>" +
+      "      Inspecting character assets..." +
+      "    </div>" +
+
+      "    <div style='display:flex;gap:6px'>" +
+      "      <button type='button' id='dm-stealer-dl-zip' class='dm-btn dm-btn-primary' style='flex:1;font-size:12px;padding:9px;font-weight:700'>" +
+      "        📦 Download Character ZIP" +
+      "      </button>" +
+      "      <button type='button' id='dm-stealer-dl-all' class='dm-btn' style='background:var(--dm-bg3);border:1px solid var(--dm-border);font-size:11px;padding:9px;color:var(--dm-text)'>" +
+      "        📥 Export All" +
+      "      </button>" +
+      "    </div>" +
+      "  </div>" +
+      "  <div id='dm-stealer-msg' style='font-size:11px;font-weight:600;min-height:16px;margin-top:4px'></div>" +
       "</div>";
 
 
@@ -2728,6 +2853,191 @@
         });
         updateCoordsDisplay();
         alert("✓ All body offsets reset to default!");
+      };
+    }
+
+    /* ── Section 7: Asset Stealer & Character Exporter Wiring ── */
+    var stealerSelect = panel.querySelector("#dm-stealer-char-select");
+    var stealerTag    = panel.querySelector("#dm-stealer-type-tag");
+    var stealerInfo   = panel.querySelector("#dm-stealer-info");
+    var stealerDlZip  = panel.querySelector("#dm-stealer-dl-zip");
+    var stealerDlAll  = panel.querySelector("#dm-stealer-dl-all");
+    var stealerMsg    = panel.querySelector("#dm-stealer-msg");
+
+    function setStealerMsg(txt, cls) {
+      if (!stealerMsg) return;
+      stealerMsg.textContent = txt;
+      stealerMsg.style.color = cls === "ok" ? "var(--dm-green)" : (cls === "err" ? "var(--dm-danger)" : "var(--dm-gold)");
+    }
+
+    function refreshStealerCharList() {
+      if (!stealerSelect) return;
+      var curVal = stealerSelect.value;
+      var allChars = [];
+
+      // 1. Add official characters
+      OFFICIAL_CHARACTERS.forEach(function (oc) {
+        allChars.push({ id: oc.id, name: oc.name, type: "official" });
+      });
+
+      // 2. Discover imported characters from savegame.save & characters_web.save
+      Promise.all([
+        readFromSavedata("savegame.save").catch(function () { return null; }),
+        readFromSavedata("characters_web.save").catch(function () { return null; })
+      ]).then(function (results) {
+        var saveBytes = results[0];
+        var webBytes = results[1];
+
+        if (saveBytes) {
+          try {
+            var o = decodeSave(saveBytes);
+            if (o && o.characters_data) {
+              Object.keys(o.characters_data).forEach(function (cid) {
+                var cd = o.characters_data[cid];
+                if (!allChars.some(function (c) { return c.id === cid; })) {
+                  var dispName = (cd.name || cid) + (cd.artist ? " (" + cd.artist + ")" : "") + " [Imported]";
+                  allChars.push({ id: cid, name: dispName, type: "imported" });
+                }
+              });
+            }
+          } catch (e1) {}
+        }
+
+        if (webBytes) {
+          try {
+            var text = dec.decode(webBytes);
+            var webObj = JSON.parse(text);
+            var root = webObj.web_data || webObj;
+            Object.keys(root).forEach(function (wcid) {
+              if (!allChars.some(function (c) { return c.id === wcid; })) {
+                allChars.push({ id: wcid, name: wcid + " [Imported]", type: "imported" });
+              }
+            });
+          } catch (e2) {}
+        }
+
+        var html = "";
+        var offGroup = "<optgroup label='Official Characters'>";
+        var impGroup = "<optgroup label='Custom / Imported Characters'>";
+        var hasImp = false;
+
+        allChars.forEach(function (c) {
+          if (c.type === "imported") {
+            hasImp = true;
+            impGroup += "<option value='" + c.id + "'>" + c.name + "</option>";
+          } else {
+            offGroup += "<option value='" + c.id + "'>" + c.name + "</option>";
+          }
+        });
+        offGroup += "</optgroup>";
+        impGroup += "</optgroup>";
+
+        html = offGroup + (hasImp ? impGroup : "");
+        stealerSelect.innerHTML = html;
+
+        if (curVal && allChars.some(function (c) { return c.id === curVal; })) {
+          stealerSelect.value = curVal;
+        } else if (_activeCharacterId && allChars.some(function (c) { return c.id === _activeCharacterId; })) {
+          stealerSelect.value = _activeCharacterId;
+        }
+        updateStealerDetails();
+      });
+    }
+
+    function updateStealerDetails() {
+      if (!stealerSelect || !stealerInfo) return;
+      var cid = stealerSelect.value;
+      if (!cid) return;
+
+      var isOfficial = !!OFFICIAL_CHAR_MANIFEST[cid];
+      if (stealerTag) {
+        stealerTag.textContent = isOfficial ? "Official" : "Imported Custom";
+        stealerTag.style.color = isOfficial ? "var(--dm-gold)" : "var(--dm-green)";
+      }
+
+      if (isOfficial) {
+        var count = Object.keys(OFFICIAL_CHAR_MANIFEST[cid] || {}).length;
+        stealerInfo.innerHTML = "<strong>Type:</strong> Official DigiBara Character<br>" +
+          "<strong>Assets:</strong> " + count + " game files (character_data.json, sprite_list.txt, PNG body parts, outfits)<br>" +
+          "<span style='color:var(--dm-green)'>✓ Ready to package and download</span>";
+      } else {
+        stealerInfo.innerHTML = "<strong>Type:</strong> Imported Custom Character<br>" +
+          "<strong>Source:</strong> Saved in browser storage (IndexedDB / characters_web.save)<br>" +
+          "<span style='color:var(--dm-green)'>✓ Will extract all sprites, outfits, audio, and JSON</span>";
+      }
+    }
+
+    if (stealerSelect) {
+      stealerSelect.onchange = updateStealerDetails;
+      refreshStealerCharList();
+      setInterval(refreshStealerCharList, 10000);
+    }
+
+    if (stealerDlZip) {
+      stealerDlZip.onclick = function () {
+        if (!stealerSelect) return;
+        var cid = stealerSelect.value;
+        if (!cid) return;
+        setStealerMsg("Packaging " + cid + " assets into ZIP...", "info");
+        stealerDlZip.disabled = true;
+
+        getCharacterZipFiles(cid).then(function (files) {
+          if (!files || !files.length) throw new Error("No files found to export.");
+          var zipBytes = makeZipFiles(files);
+          var blob = new Blob([zipBytes], { type: "application/zip" });
+          var url = URL.createObjectURL(blob);
+          var a = document.createElement("a");
+          a.href = url;
+          a.download = cid + ".zip";
+          document.body.appendChild(a);
+          a.click();
+          setTimeout(function () { a.remove(); URL.revokeObjectURL(url); }, 1500);
+          setStealerMsg("✓ Downloaded " + cid + ".zip (" + files.length + " files)!", "ok");
+        }).catch(function (err) {
+          setStealerMsg("Export failed: " + err.message, "err");
+        }).finally(function () {
+          stealerDlZip.disabled = false;
+        });
+      };
+    }
+
+    if (stealerDlAll) {
+      stealerDlAll.onclick = function () {
+        if (!stealerSelect) return;
+        var options = stealerSelect.querySelectorAll("option");
+        if (!options || !options.length) return;
+        if (!confirm("Export all " + options.length + " characters as ZIP files?")) return;
+
+        setStealerMsg("Exporting " + options.length + " characters...", "info");
+        var cids = [];
+        options.forEach(function (opt) { cids.push(opt.value); });
+
+        var idx = 0;
+        function exportNext() {
+          if (idx >= cids.length) {
+            setStealerMsg("✓ Finished exporting all " + cids.length + " characters!", "ok");
+            return;
+          }
+          var cid = cids[idx];
+          setStealerMsg("Exporting (" + (idx + 1) + "/" + cids.length + ") " + cid + "...", "info");
+          getCharacterZipFiles(cid).then(function (files) {
+            var zipBytes = makeZipFiles(files);
+            var blob = new Blob([zipBytes], { type: "application/zip" });
+            var url = URL.createObjectURL(blob);
+            var a = document.createElement("a");
+            a.href = url;
+            a.download = cid + ".zip";
+            document.body.appendChild(a);
+            a.click();
+            setTimeout(function () { a.remove(); URL.revokeObjectURL(url); }, 1500);
+            idx++;
+            setTimeout(exportNext, 800);
+          }).catch(function (e) {
+            idx++;
+            setTimeout(exportNext, 300);
+          });
+        }
+        exportNext();
       };
     }
     } catch (e) {
