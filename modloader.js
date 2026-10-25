@@ -1378,7 +1378,8 @@
   }
 
   function build() {
-    injectStyles();
+    try {
+      injectStyles();
 
     var fab = document.createElement("button");
     fab.id = "dm-fab";
@@ -1663,37 +1664,6 @@
       });
     }).catch(function () {});
 
-    /* ── Background module inspector wiring ── */
-    function renderBgDefs(defs) {
-      var statusEl = panel.querySelector("#dm-bg-status");
-      var paramsEl = panel.querySelector("#dm-bg-params");
-      if (!defs) {
-        statusEl.textContent = "⏳ Equip a Background module in-game and return here to see its settings.";
-        statusEl.style.color = "var(--dm-muted)";
-        paramsEl.style.display = "none";
-        return;
-      }
-      statusEl.innerHTML = "✅ <strong>Background module active!</strong> Parameters below:";
-      statusEl.style.color = "var(--dm-green)";
-      paramsEl.style.display = "block";
-      paramsEl.innerHTML = "<pre style='background:var(--dm-bg2);border:1px solid var(--dm-border);border-radius:8px;padding:10px;font-size:10px;color:var(--dm-text);overflow:auto;max-height:200px;white-space:pre-wrap;word-break:break-all;margin:0'>" +
-        JSON.stringify(defs, null, 2) + "</pre>";
-    }
-
-    // Check immediately (in case game already called it)
-    renderBgDefs(window._digibara_wallpaper_definitions ||
-      (function() { try { var s = localStorage.getItem("digibara_wallpaper_defs"); return s ? JSON.parse(s) : null; } catch(e) { return null; } })()
-    );
-
-    // Live update when game calls it while panel is open
-    window._digibara_wallpaper_callbacks.push(renderBgDefs);
-
-    // Manual refresh button
-    panel.querySelector("#dm-bg-refresh").onclick = function() {
-      renderBgDefs(window._digibara_wallpaper_definitions ||
-        (function() { try { var s = localStorage.getItem("digibara_wallpaper_defs"); return s ? JSON.parse(s) : null; } catch(e) { return null; } })()
-      );
-    };
 
     /* ── Quick Equip Room Background ── */
     var setBgBtn = panel.querySelector("#dm-set-bg-btn");
@@ -1838,6 +1808,9 @@
         try { localStorage.setItem("dm_canvas_glow", enabled ? "1" : "0"); } catch (e) {}
         applyGlow(enabled);
       };
+    }
+    } catch (e) {
+      console.warn("[DigiBara Modloader Error]:", e);
     }
   }
 
