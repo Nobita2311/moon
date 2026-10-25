@@ -1,6 +1,131 @@
 /* DigiBara Mods — Extended Edition v3 (injected by serve_mods.py) */
 (function () {
-  "use strict";
+  /* ═══════════════════════════════════════════════════════════════
+     §0  CUSTOM IN-GAME ROOM BACKGROUND ENGINE (WebGL Transparency)
+     ═══════════════════════════════════════════════════════════════ */
+  var _customRoomBg = null;
+  try { _customRoomBg = localStorage.getItem("dm_custom_room_bg"); } catch (e) {}
+  window._digibara_custom_room_bg = !!_customRoomBg;
+
+  function applyRoomBgToCanvas(url) {
+    var cv = document.getElementById("canvas");
+    if (!cv) return;
+    if (url) {
+      window._digibara_custom_room_bg = true;
+      cv.style.setProperty("background-color", "transparent", "important");
+      cv.style.setProperty("background-image", "url('" + url + "')", "important");
+      cv.style.setProperty("background-size", "cover", "important");
+      cv.style.setProperty("background-position", "center", "important");
+      cv.style.setProperty("background-repeat", "no-repeat", "important");
+    } else {
+      window._digibara_custom_room_bg = false;
+      cv.style.removeProperty("background-image");
+      cv.style.removeProperty("background-size");
+      cv.style.removeProperty("background-position");
+      cv.style.removeProperty("background-repeat");
+      cv.style.setProperty("background-color", "black", "important");
+    }
+  }
+
+  function compressAndProcessImage(fileOrBlob, maxWidth, maxHeight, quality, callback) {
+    try {
+      var reader = new FileReader();
+      reader.onload = function (e) {
+        var img = new Image();
+        img.onload = function () {
+          try {
+            var w = img.width;
+            var h = img.height;
+            if (w > maxWidth || h > maxHeight) {
+              var ratio = Math.min(maxWidth / w, maxHeight / h);
+              w = Math.round(w * ratio);
+              h = Math.round(h * ratio);
+            }
+            var c = document.createElement("canvas");
+            c.width = w;
+            c.height = h;
+            var ctx = c.getContext("2d");
+            ctx.drawImage(img, 0, 0, w, h);
+            var compressedDataUrl = c.toDataURL("image/jpeg", quality || 0.85);
+            callback(null, compressedDataUrl);
+          } catch (err) {
+            callback(err);
+          }
+        };
+        img.onerror = function () {
+          callback(new Error("Could not decode image file."));
+        };
+        img.src = e.target.result;
+      };
+      reader.onerror = function (err) {
+        callback(err || new Error("Failed to read file."));
+      };
+      reader.readAsDataURL(fileOrBlob);
+    } catch (e) {
+      callback(e);
+    }
+  }
+
+  try {
+    var _origGetContext = HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext = function (type, attrs) {
+      var isGameCanvas = this && (this.id === "canvas" || (this.classList && this.classList.contains("emscripten")));
+      if (isGameCanvas && typeof type === "string" && type.indexOf("webgl") !== -1) {
+        var newAttrs = {};
+        if (attrs && typeof attrs === "object") {
+          for (var k in attrs) {
+            if (Object.prototype.hasOwnProperty.call(attrs, k)) newAttrs[k] = attrs[k];
+          }
+        }
+        newAttrs.alpha = true;
+        attrs = newAttrs;
+      }
+      var ctx = _origGetContext.call(this, type, attrs);
+      if (isGameCanvas && ctx && !ctx._dm_hooked && typeof ctx.clearColor === "function") {
+        ctx._dm_hooked = true;
+        var _origClearColor = ctx.clearColor.bind(ctx);
+        var _origClear = ctx.clear.bind(ctx);
+        var _origColorMask = typeof ctx.colorMask === "function" ? ctx.colorMask.bind(ctx) : null;
+
+        if (_origColorMask) {
+          ctx.colorMask = function (r, g, b, a) {
+            if (window._digibara_custom_room_bg) a = true;
+            return _origColorMask(r, g, b, a);
+          };
+        }
+
+        ctx.clearColor = function (r, g, b, a) {
+          if (window._digibara_custom_room_bg) {
+            // When game clears to dark/black room background, clear to transparent
+            if (r < 0.08 && g < 0.08 && b < 0.08) {
+              return _origClearColor(0, 0, 0, 0);
+            }
+          }
+          return _origClearColor(r, g, b, a);
+        };
+
+        ctx.clear = function (mask) {
+          if (window._digibara_custom_room_bg && (mask & 16384)) {
+            if (_origColorMask) try { _origColorMask(true, true, true, true); } catch (e) {}
+          }
+          return _origClear(mask);
+        };
+      }
+      return ctx;
+    };
+  } catch (e) {}
+
+  window.addEventListener("DOMContentLoaded", function () {
+    if (_customRoomBg) applyRoomBgToCanvas(_customRoomBg);
+  });
+  setInterval(function () {
+    if (window._digibara_custom_room_bg && _customRoomBg) {
+      var cv = document.getElementById("canvas");
+      if (cv && (!cv.style.backgroundImage || cv.style.backgroundColor !== "transparent")) {
+        applyRoomBgToCanvas(_customRoomBg);
+      }
+    }
+  }, 1000);
 
   /* ═══════════════════════════════════════════════════════════════
      §1  VIRTUAL CLOCK (Game Speed Multiplier)
@@ -1463,52 +1588,43 @@
       "  </div>" +
       "</div>" +
 
-      /* Section 5: Custom Background & Wallpapers */
+      /* Section 5: Custom In-Game Room Background */
       "<div class='dm-section'>" +
-      "  <div class='dm-sec-title'>🖼️ Custom Background</div>" +
+      "  <div class='dm-sec-title'>🏠 In-Game Room Background</div>" +
 
       "  <!-- Upload from Phone / Enter URL box -->" +
       "  <div style='background:var(--dm-bg2);border:1px solid var(--dm-border);border-radius:8px;padding:12px;margin-bottom:12px'>" +
-      "    <div style='font-size:12px;font-weight:700;margin-bottom:4px;color:var(--dm-gold)'>📱 Phone / PC Wallpaper</div>" +
-      "    <p style='font-size:11px;color:var(--dm-muted);margin:0 0 10px;line-height:1.4'>Set any custom photo or wallpaper from your device behind the game.</p>" +
+      "    <div style='font-size:12px;font-weight:700;margin-bottom:4px;color:var(--dm-gold)'>Custom Room Backdrop</div>" +
+      "    <p style='font-size:11px;color:var(--dm-muted);margin:0 0 10px;line-height:1.4'>Replaces the black room background directly behind the character.</p>" +
 
       "    <input type='file' id='dm-bg-file' accept='image/*' style='display:none'>" +
       "    <div style='display:flex;gap:6px;margin-bottom:8px'>" +
-      "      <button type='button' id='dm-bg-upload-btn' class='dm-btn dm-btn-primary' style='flex:1;font-size:11px;padding:8px 10px'>📁 Upload from Phone</button>" +
+      "      <button type='button' id='dm-bg-upload-btn' class='dm-btn dm-btn-primary' style='flex:1;font-size:11px;padding:8px 10px'>📁 Upload Room Photo</button>" +
       "      <button type='button' id='dm-bg-clear-btn' class='dm-btn dm-btn-danger' style='font-size:11px;padding:8px 10px'>Reset</button>" +
       "    </div>" +
 
       "    <div style='display:flex;gap:6px'>" +
-      "      <input id='dm-custom-bg-url' type='text' placeholder='Or paste image link (https://...)' style='flex:1;min-width:0;box-sizing:border-box;padding:7px 8px;border-radius:6px;background:var(--dm-bg3);color:var(--dm-text);border:1px solid var(--dm-border);font-size:11px'>" +
+      "      <input id='dm-custom-bg-url' type='text' placeholder='Or paste image URL (https://...)' style='flex:1;min-width:0;box-sizing:border-box;padding:7px 8px;border-radius:6px;background:var(--dm-bg3);color:var(--dm-text);border:1px solid var(--dm-border);font-size:11px'>" +
       "      <button type='button' id='dm-apply-url-bg' class='dm-btn dm-btn-secondary' style='font-size:11px;padding:7px 12px'>Apply</button>" +
       "    </div>" +
 
       "    <div id='dm-bg-preview-wrap' style='display:none;margin-top:10px;align-items:center;gap:10px;padding:8px;background:rgba(0,0,0,.35);border-radius:6px;border:1px solid var(--dm-border)'>" +
       "      <img id='dm-bg-preview' style='width:42px;height:42px;object-fit:cover;border-radius:6px;border:1px solid var(--dm-accent)'>" +
       "      <div style='flex:1;font-size:11px'>" +
-      "        <span style='color:var(--dm-green);font-weight:700;display:block'>✓ Custom Wallpaper Active</span>" +
-      "        <span style='color:var(--dm-muted);font-size:10px'>Saved &amp; loaded automatically</span>" +
+      "        <span style='color:var(--dm-green);font-weight:700;display:block'>✓ Custom Room Active</span>" +
+      "        <span style='color:var(--dm-muted);font-size:10px'>Saved &amp; loaded behind character</span>" +
       "      </div>" +
       "    </div>" +
       "  </div>" +
 
-      "  <!-- Theme Presets -->" +
-      "  <div style='font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--dm-accent);margin-bottom:6px'>Presets:</div>" +
-      "  <div style='display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:12px'>" +
-      "    <button type='button' class='dm-btn dm-btn-secondary dm-theme-preset' data-theme='default' style='font-size:11px;padding:6px'>🌌 Dark Void</button>" +
-      "    <button type='button' class='dm-btn dm-btn-secondary dm-theme-preset' data-theme='cyberpunk' style='font-size:11px;padding:6px'>⚡ Cyberpunk</button>" +
-      "    <button type='button' class='dm-btn dm-btn-secondary dm-theme-preset' data-theme='galaxy' style='font-size:11px;padding:6px'>✨ Deep Galaxy</button>" +
-      "    <button type='button' class='dm-btn dm-btn-secondary dm-theme-preset' data-theme='sunset' style='font-size:11px;padding:6px'>🌇 Tokyo Sunset</button>" +
-      "  </div>" +
-
-      "  <!-- In-game room background quick equip -->" +
-      "  <div style='font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--dm-accent);margin-bottom:6px'>In-Game Room Background:</div>" +
+      "  <!-- In-game room official background quick equip -->" +
+      "  <div style='font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--dm-accent);margin-bottom:6px'>Official Room Presets:</div>" +
       "  <div style='display:flex;gap:6px;margin-bottom:12px'>" +
       "    <select id='dm-quick-bg' style='flex:1;padding:7px;border-radius:6px;background:var(--dm-bg2);color:var(--dm-text);border:1px solid var(--dm-border);font-size:12px'>" +
       [
-        "Background 0", "Background 1", "Background 2", "Background 3",
+        "Background Black", "Background 0", "Background 1", "Background 2", "Background 3",
         "Background 4", "Background 5", "Background 6", "Background 7",
-        "Background 8", "Background 9", "Background 10", "Background Black"
+        "Background 8", "Background 9", "Background 10"
       ].map(function (bg) {
         return "<option value='" + bg + "'>" + bg + "</option>";
       }).join("") +
@@ -1625,11 +1741,154 @@
     }).catch(function () {});
 
 
-    /* ── Quick Equip Room Background ── */
-    var setBgBtn = panel.querySelector("#dm-set-bg-btn");
-    if (setBgBtn) {
+    /* ── Helper to ensure Background Black in savegame so GameMaker uses transparent room clear ── */
+    function ensureBackgroundBlackInSave() {
+      return readFromSavedata("savegame.save").then(function (bytes) {
+        var o = decodeSave(bytes);
+        if (!o || typeof o !== "object" || !o.characters_data) return false;
+        var changed = false;
+        Object.keys(o.characters_data).forEach(function (cid) {
+          if (o.characters_data[cid].equipped_background !== "Background Black") {
+            o.characters_data[cid].equipped_background = "Background Black";
+            changed = true;
+          }
+        });
+        if (changed) {
+          var saveBytes = encodeSave(o);
+          writeToSavedata("savegame.save", saveBytes);
+        }
+        return changed;
+      }).catch(function (e) {
+        return false;
+      });
+    }
+
+    /* ── Custom In-Game Room Background Wiring ── */
+    var uploadBtn      = panel.querySelector("#dm-bg-upload-btn");
+    var fileInput      = panel.querySelector("#dm-bg-file");
+    var clearBtn       = panel.querySelector("#dm-bg-clear-btn");
+    var customUrlInput = panel.querySelector("#dm-custom-bg-url");
+    var applyUrlBtn    = panel.querySelector("#dm-apply-url-bg");
+    var previewWrap    = panel.querySelector("#dm-bg-preview-wrap");
+    var previewImg     = panel.querySelector("#dm-bg-preview");
+    var setBgBtn       = panel.querySelector("#dm-set-bg-btn");
+    var quickBgSelect  = panel.querySelector("#dm-quick-bg");
+    var glowToggle     = panel.querySelector("#dm-canvas-glow");
+
+    function updatePreview(url) {
+      if (url) {
+        if (previewWrap) previewWrap.style.display = "flex";
+        if (previewImg) previewImg.src = url;
+      } else {
+        if (previewWrap) previewWrap.style.display = "none";
+        if (previewImg) previewImg.src = "";
+      }
+    }
+
+    function setCustomRoomBg(url) {
+      if (!url) return;
+      try {
+        localStorage.setItem("dm_custom_room_bg", url);
+      } catch (ex) {
+        console.warn("Storage quota exceeded", ex);
+      }
+      _customRoomBg = url;
+      window._digibara_custom_room_bg = true;
+      applyRoomBgToCanvas(url);
+      updatePreview(url);
+
+      ensureBackgroundBlackInSave().then(function (changed) {
+        if (changed) {
+          alert("✓ Custom room background active! Reloading to switch room render mode...");
+          setTimeout(function () { window.location.reload(); }, 600);
+        } else {
+          alert("✓ Custom room background applied directly behind character!");
+        }
+      });
+    }
+
+    function clearCustomRoomBg() {
+      try { localStorage.removeItem("dm_custom_room_bg"); } catch (e) {}
+      _customRoomBg = null;
+      window._digibara_custom_room_bg = false;
+      applyRoomBgToCanvas(null);
+      updatePreview(null);
+      if (customUrlInput) customUrlInput.value = "";
+    }
+
+    // Initialize preview and glow on startup
+    try {
+      if (_customRoomBg) {
+        updatePreview(_customRoomBg);
+        if (customUrlInput && /^https?:\/\//.test(_customRoomBg)) {
+          customUrlInput.value = _customRoomBg;
+        }
+      }
+      var savedGlow = localStorage.getItem("dm_canvas_glow") === "1";
+      if (glowToggle) glowToggle.checked = savedGlow;
+      function applyGlow(enabled) {
+        var cv = document.getElementById("canvas");
+        if (!cv) return;
+        if (enabled) {
+          cv.style.boxShadow = "0 0 25px rgba(200, 109, 215, 0.45), 0 0 50px rgba(139, 79, 207, 0.25)";
+          cv.style.borderRadius = "8px";
+        } else {
+          cv.style.boxShadow = "";
+          cv.style.borderRadius = "";
+        }
+      }
+      setTimeout(function () { applyGlow(savedGlow); }, 1000);
+      if (glowToggle) {
+        glowToggle.onchange = function () {
+          var enabled = glowToggle.checked;
+          try { localStorage.setItem("dm_canvas_glow", enabled ? "1" : "0"); } catch (e) {}
+          applyGlow(enabled);
+        };
+      }
+    } catch (e) {}
+
+    // 1. Upload photo from phone / device
+    if (uploadBtn && fileInput) {
+      uploadBtn.onclick = function () { fileInput.click(); };
+      fileInput.onchange = function (ev) {
+        var file = ev.target.files && ev.target.files[0];
+        if (!file) return;
+        uploadBtn.textContent = "⏳ Processing...";
+        compressAndProcessImage(file, 1920, 1080, 0.85, function (err, dataUrl) {
+          uploadBtn.textContent = "📁 Upload Room Photo";
+          if (err || !dataUrl) {
+            alert("Could not load image: " + (err ? err.message : "unknown"));
+            return;
+          }
+          setCustomRoomBg(dataUrl);
+        });
+      };
+    }
+
+    // 2. Apply Image URL
+    if (applyUrlBtn && customUrlInput) {
+      applyUrlBtn.onclick = function () {
+        var url = customUrlInput.value.trim();
+        if (!url) return;
+        setCustomRoomBg(url);
+      };
+    }
+
+    // 3. Reset room background
+    if (clearBtn) {
+      clearBtn.onclick = function () {
+        clearCustomRoomBg();
+        alert("✓ Custom room background removed.");
+      };
+    }
+
+    // 4. Equip official background preset
+    if (setBgBtn && quickBgSelect) {
       setBgBtn.onclick = function () {
-        var chosen = panel.querySelector("#dm-quick-bg").value;
+        var chosen = quickBgSelect.value;
+        if (chosen !== "Background Black") {
+          clearCustomRoomBg();
+        }
         readFromSavedata("savegame.save").then(function (bytes) {
           var o = decodeSave(bytes);
           if (!o || typeof o !== "object" || !o.characters_data) throw new Error("No characters found in save.");
@@ -1644,129 +1903,6 @@
         }).catch(function (err) {
           alert("Could not update background directly: " + err.message + "\nTip: Open Save Editor first to load save.");
         });
-      };
-    }
-
-    /* ── Custom Background, Upload, URL, Presets & Glow wiring ── */
-    var uploadBtn      = panel.querySelector("#dm-bg-upload-btn");
-    var fileInput      = panel.querySelector("#dm-bg-file");
-    var clearBtn       = panel.querySelector("#dm-bg-clear-btn");
-    var customUrlInput = panel.querySelector("#dm-custom-bg-url");
-    var applyUrlBtn    = panel.querySelector("#dm-apply-url-bg");
-    var previewWrap    = panel.querySelector("#dm-bg-preview-wrap");
-    var previewImg     = panel.querySelector("#dm-bg-preview");
-    var glowToggle     = panel.querySelector("#dm-canvas-glow");
-
-    var THEMES = {
-      default:   "radial-gradient(56.63% 56.63% at 50% 43.37%, #1c1726 0%, #060612 100%)",
-      cyberpunk: "radial-gradient(circle at 50% 30%, #201435 0%, #060713 100%), linear-gradient(135deg, rgba(139,92,246,0.15), rgba(6,182,212,0.15))",
-      galaxy:    "radial-gradient(circle at 50% 40%, #2a0845 0%, #090014 100%)",
-      sunset:    "radial-gradient(circle at 50% 40%, #3e1b2f 0%, #0d0614 100%)"
-    };
-
-    function applyBg(bgVal, isImage) {
-      if (isImage && bgVal) {
-        document.body.style.background = "url('" + bgVal + "') center / cover no-repeat fixed #060612";
-        if (previewWrap) {
-          previewWrap.style.display = "flex";
-          if (previewImg) previewImg.src = bgVal;
-        }
-      } else {
-        document.body.style.background = THEMES[bgVal] || THEMES.default;
-        if (previewWrap) previewWrap.style.display = "none";
-      }
-    }
-
-    function applyGlow(enabled) {
-      var cv = document.getElementById("canvas");
-      if (!cv) return;
-      if (enabled) {
-        cv.style.boxShadow = "0 0 25px rgba(200, 109, 215, 0.45), 0 0 50px rgba(139, 79, 207, 0.25)";
-        cv.style.borderRadius = "8px";
-      } else {
-        cv.style.boxShadow = "";
-        cv.style.borderRadius = "";
-      }
-    }
-
-    // Load saved background on startup
-    try {
-      var savedImg   = localStorage.getItem("dm_custom_bg");
-      var savedTheme = localStorage.getItem("dm_backdrop_theme") || "default";
-      var savedGlow  = localStorage.getItem("dm_canvas_glow") === "1";
-      if (savedImg) {
-        applyBg(savedImg, true);
-        if (customUrlInput && /^https?:\/\//.test(savedImg)) customUrlInput.value = savedImg;
-      } else {
-        applyBg(savedTheme, false);
-      }
-      if (glowToggle) glowToggle.checked = savedGlow;
-      setTimeout(function () { applyGlow(savedGlow); }, 1000);
-    } catch (e) {}
-
-    // 1. Upload image from phone / device
-    if (uploadBtn && fileInput) {
-      uploadBtn.onclick = function () { fileInput.click(); };
-      fileInput.onchange = function (ev) {
-        var file = ev.target.files && ev.target.files[0];
-        if (!file) return;
-        var reader = new FileReader();
-        reader.onload = function (e) {
-          var dataUrl = e.target.result;
-          try {
-            localStorage.setItem("dm_custom_bg", dataUrl);
-            localStorage.removeItem("dm_backdrop_theme");
-          } catch (ex) {}
-          applyBg(dataUrl, true);
-        };
-        reader.readAsDataURL(file);
-      };
-    }
-
-    // 2. Apply Image URL
-    if (applyUrlBtn && customUrlInput) {
-      applyUrlBtn.onclick = function () {
-        var url = customUrlInput.value.trim();
-        if (!url) return;
-        try {
-          localStorage.setItem("dm_custom_bg", url);
-          localStorage.removeItem("dm_backdrop_theme");
-        } catch (ex) {}
-        applyBg(url, true);
-      };
-    }
-
-    // 3. Reset background to default
-    if (clearBtn) {
-      clearBtn.onclick = function () {
-        try {
-          localStorage.removeItem("dm_custom_bg");
-          localStorage.removeItem("dm_backdrop_theme");
-        } catch (ex) {}
-        if (customUrlInput) customUrlInput.value = "";
-        applyBg("default", false);
-      };
-    }
-
-    // 4. Aesthetic Presets
-    panel.querySelectorAll(".dm-theme-preset").forEach(function (btn) {
-      btn.onclick = function () {
-        var th = btn.getAttribute("data-theme");
-        try {
-          localStorage.removeItem("dm_custom_bg");
-          localStorage.setItem("dm_backdrop_theme", th);
-        } catch (ex) {}
-        if (customUrlInput) customUrlInput.value = "";
-        applyBg(th, false);
-      };
-    });
-
-    // 5. Canvas Glow toggle
-    if (glowToggle) {
-      glowToggle.onchange = function () {
-        var enabled = glowToggle.checked;
-        try { localStorage.setItem("dm_canvas_glow", enabled ? "1" : "0"); } catch (e) {}
-        applyGlow(enabled);
       };
     }
     } catch (e) {
