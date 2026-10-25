@@ -318,6 +318,49 @@
   setTimeout(ensurePatreonOnDisk, 2000);
   setTimeout(ensurePatreonOnDisk, 5000);
   setTimeout(ensurePatreonOnDisk, 10000);
+
+  /* ═══════════════════════════════════════════════════════════════
+     §2b  WALLPAPER CONFIG INTERCEPTOR
+     Captures the background module's parameter definitions when the
+     game calls wallpaper_init_config_controls(), and exposes them
+     in the Mods panel so we can see what's configurable.
+     ═══════════════════════════════════════════════════════════════ */
+  window._digibara_wallpaper_definitions = null;
+  window._digibara_wallpaper_callbacks = [];
+
+  var _origWallpaperInit = window.wallpaper_init_config_controls;
+  window.wallpaper_init_config_controls = function(definitions) {
+    window._digibara_wallpaper_definitions = definitions;
+    // Store to localStorage so Mods panel can access it
+    try {
+      localStorage.setItem("digibara_wallpaper_defs", JSON.stringify(definitions));
+    } catch(e) {}
+    // Notify any listeners (e.g. the Mods panel)
+    window._digibara_wallpaper_callbacks.forEach(function(fn) {
+      try { fn(definitions); } catch(e) {}
+    });
+    // Call original if it existed
+    if (typeof _origWallpaperInit === "function") _origWallpaperInit(definitions);
+  };
+
+  // Also intercept future assignments (game sets it after runner.js loads)
+  var _wicDesc = Object.getOwnPropertyDescriptor(window, "wallpaper_init_config_controls");
+  if (!_wicDesc || _wicDesc.configurable !== false) {
+    var _wicVal = window.wallpaper_init_config_controls;
+    Object.defineProperty(window, "wallpaper_init_config_controls", {
+      get: function() { return _wicVal; },
+      set: function(fn) {
+        _wicVal = function(defs) {
+          window._digibara_wallpaper_definitions = defs;
+          try { localStorage.setItem("digibara_wallpaper_defs", JSON.stringify(defs)); } catch(e) {}
+          window._digibara_wallpaper_callbacks.forEach(function(cb) { try { cb(defs); } catch(e) {} });
+          if (typeof fn === "function") fn(defs);
+        };
+      },
+      configurable: true
+    });
+  }
+
   setTimeout(ensurePatreonOnDisk, 20000);
   setTimeout(ensurePatreonOnDisk, 30000);
   // Also re-write every 60s to keep it fresh
@@ -1457,7 +1500,19 @@
       "    <button type='button' id='dm-reload' class='dm-btn dm-btn-secondary'>🔄 Reload</button>" +
       "    <button type='button' id='dm-reset' class='dm-btn dm-btn-danger'>↩ Reset</button>" +
       "  </div>" +
+      "</div>" +
+
+      /* Section 6: Background Module Inspector */
+      "<div class='dm-section'>" +
+      "  <div class='dm-sec-title'>🎨 Background Module</div>" +
+      "  <div id='dm-bg-status' style='font-size:12px;color:var(--dm-muted);line-height:1.5;margin-bottom:8px'>" +
+      "    ⏳ Equip a Background module in-game and return here to see its settings." +
+      "  </div>" +
+      "  <div id='dm-bg-params' style='display:none'></div>" +
+      "  <button type='button' id='dm-bg-refresh' class='dm-btn dm-btn-secondary' style='margin-top:6px;font-size:11px'>🔍 Check Now</button>" +
+      "  <small style='display:block;margin-top:6px;color:var(--dm-muted)'>Parameters exposed by the game's background module via wallpaper_update_config.</small>" +
       "</div>";
+
 
     document.body.appendChild(panel);
 
@@ -1553,6 +1608,38 @@
         if (el) el.checked = !!cfg[MAP[id]];
       });
     }).catch(function () {});
+
+    /* ── Background module inspector wiring ── */
+    function renderBgDefs(defs) {
+      var statusEl = panel.querySelector("#dm-bg-status");
+      var paramsEl = panel.querySelector("#dm-bg-params");
+      if (!defs) {
+        statusEl.textContent = "⏳ Equip a Background module in-game and return here to see its settings.";
+        statusEl.style.color = "var(--dm-muted)";
+        paramsEl.style.display = "none";
+        return;
+      }
+      statusEl.innerHTML = "✅ <strong>Background module active!</strong> Parameters below:";
+      statusEl.style.color = "var(--dm-green)";
+      paramsEl.style.display = "block";
+      paramsEl.innerHTML = "<pre style='background:var(--dm-bg2);border:1px solid var(--dm-border);border-radius:8px;padding:10px;font-size:10px;color:var(--dm-text);overflow:auto;max-height:200px;white-space:pre-wrap;word-break:break-all;margin:0'>" +
+        JSON.stringify(defs, null, 2) + "</pre>";
+    }
+
+    // Check immediately (in case game already called it)
+    renderBgDefs(window._digibara_wallpaper_definitions ||
+      (function() { try { var s = localStorage.getItem("digibara_wallpaper_defs"); return s ? JSON.parse(s) : null; } catch(e) { return null; } })()
+    );
+
+    // Live update when game calls it while panel is open
+    window._digibara_wallpaper_callbacks.push(renderBgDefs);
+
+    // Manual refresh button
+    panel.querySelector("#dm-bg-refresh").onclick = function() {
+      renderBgDefs(window._digibara_wallpaper_definitions ||
+        (function() { try { var s = localStorage.getItem("digibara_wallpaper_defs"); return s ? JSON.parse(s) : null; } catch(e) { return null; } })()
+      );
+    };
   }
 
   if (document.body) build();
