@@ -895,6 +895,11 @@
         "  <button type='button' id='se-unlock-outfits-modules' class='dm-btn-se dm-btn-se-secondary'>👗 Unlock ALL Outfits &amp; Modules (0-199)</button>" +
         "</div>" +
 
+        "<div class='se-section-title' style='margin-top:16px'>🖼️ Backgrounds &amp; Shop Unlocker</div>" +
+        "<div class='dm-btn-row' style='margin-bottom:10px'>" +
+        "  <button type='button' id='se-unlock-bg' class='dm-btn-se dm-btn-se-primary' style='background:linear-gradient(135deg,#059669,#10b981)'>🖼️ Unlock All Backgrounds &amp; Set Max Cash ($999M)</button>" +
+        "</div>" +
+
         "<div class='dm-char-grid-unlock'>" +
         OFFICIAL_CHARACTERS.map(function (oc) {
           var cd = data.characters_data[oc.id];
@@ -913,7 +918,7 @@
 
       box.querySelector("#se-god-mode").onclick = function () {
         stampPatreon(data);
-        data.money = Math.max(data.money || 0, 10000000);
+        data.money = Math.max(data.money || 0, 999999999);
         data.facility_exp = Math.max(data.facility_exp || 0, 50000);
         data.tickets = Math.max(data.tickets || 0, 999);
         data.daily_streak = Math.max(data.daily_streak || 0, 365);
@@ -924,7 +929,7 @@
         Object.keys(data.characters_data).forEach(function (cid) {
           stampCharUnlock(data.characters_data[cid]);
         });
-        setMsg("🌟 GOD MODE APPLIED: Everything unlocked, Patreon VIP Plus enabled, maxed money & tickets!", "ok");
+        setMsg("🌟 GOD MODE APPLIED: Everything unlocked, Patreon VIP Plus enabled, maxed money ($999M) & tickets!", "ok");
         renderUnlock();
       };
 
@@ -950,6 +955,26 @@
           stampCharUnlock(data.characters_data[cid]);
         });
         setMsg("✓ All outfits (indices 0-199) and all modules unlocked for all characters!", "ok");
+      };
+
+      box.querySelector("#se-unlock-bg").onclick = function () {
+        data.money = Math.max(data.money || 0, 999999999);
+        var ALL_BGS = [
+          "Background 0", "Background 1", "Background 2", "Background 3",
+          "Background 4", "Background 5", "Background 6", "Background 7",
+          "Background 8", "Background 9", "Background 10", "Background Black"
+        ];
+        if (Array.isArray(data.inventory)) {
+          ALL_BGS.forEach(function (bg) {
+            if (data.inventory.indexOf(bg) === -1) data.inventory.push(bg);
+          });
+        }
+        Object.keys(data.characters_data || {}).forEach(function (cid) {
+          if (!data.characters_data[cid].equipped_background) {
+            data.characters_data[cid].equipped_background = "Background 10";
+          }
+        });
+        setMsg("✓ Cash set to $999M! You can now buy all Backgrounds in the shop instantly.", "ok");
       };
 
       OFFICIAL_CHARACTERS.forEach(function (oc) {
@@ -1105,6 +1130,20 @@
         numField("se-weight",    "Weight (kg)", c.weight  || 70, "", [{ label: "65", val: 65, mode: "set" }, { label: "80", val: 80, mode: "set" }]) +
         "</div>" +
 
+        "<div class='se-section-title' style='margin-top:14px'>🖼️ Room Background</div>" +
+        "<div class='dm-char-picker' style='margin-bottom:10px'>" +
+        "  <label for='se-char-bg'>Equipped Background:</label>" +
+        "  <select id='se-char-bg' style='width:100%;padding:7px;border-radius:6px;background:var(--dm-bg2);color:var(--dm-text);border:1px solid var(--dm-border);font-size:12px'>" +
+        [
+          "Background 0", "Background 1", "Background 2", "Background 3",
+          "Background 4", "Background 5", "Background 6", "Background 7",
+          "Background 8", "Background 9", "Background 10", "Background Black"
+        ].map(function (bg) {
+          return "<option value='" + bg + "'" + ((c.equipped_background === bg) ? " selected" : "") + ">" + bg + "</option>";
+        }).join("") +
+        "  </select>" +
+        "</div>" +
+
         "<div class='se-section-title' style='margin-top:14px'>🔓 Unlock Status</div>" +
         toggle("se-char-unlocked", "Character Unlocked",   !!(c.unlocked)) +
         toggle("se-char-imported", "Imported Character",    !!(c.imported)) +
@@ -1174,6 +1213,8 @@
       c.unlocked              = b("se-char-unlocked", c.unlocked);
       c.imported              = b("se-char-imported", c.imported);
       c.is_premium            = b("se-char-premium",  c.is_premium);
+      var bgEl                = box.querySelector("#se-char-bg");
+      if (bgEl && bgEl.value) c.equipped_background = bgEl.value;
     }
 
     /* ── TAB 4: RAW JSON VIEW ── */
@@ -1502,15 +1543,55 @@
       "  </div>" +
       "</div>" +
 
-      /* Section 6: Background Module Inspector */
+      /* Section 6: Backgrounds & Visual Themes */
       "<div class='dm-section'>" +
-      "  <div class='dm-sec-title'>🎨 Background Module</div>" +
-      "  <div id='dm-bg-status' style='font-size:12px;color:var(--dm-muted);line-height:1.5;margin-bottom:8px'>" +
-      "    ⏳ Equip a Background module in-game and return here to see its settings." +
+      "  <div class='dm-sec-title'>🎨 Backgrounds &amp; Themes</div>" +
+      "  <div style='font-size:12px;margin-bottom:4px;font-weight:600;color:var(--dm-text)'>Quick Equip Room Background:</div>" +
+      "  <div style='display:flex;gap:6px;margin-bottom:10px'>" +
+      "    <select id='dm-quick-bg' style='flex:1;padding:6px;border-radius:6px;background:var(--dm-bg2);color:var(--dm-text);border:1px solid var(--dm-border);font-size:11px'>" +
+      [
+        "Background 0", "Background 1", "Background 2", "Background 3",
+        "Background 4", "Background 5", "Background 6", "Background 7",
+        "Background 8", "Background 9", "Background 10", "Background Black"
+      ].map(function (bg) {
+        return "<option value='" + bg + "'>" + bg + "</option>";
+      }).join("") +
+      "    </select>" +
+      "    <button type='button' id='dm-set-bg-btn' class='dm-btn dm-btn-primary' style='padding:6px 10px;font-size:11px'>Equip</button>" +
       "  </div>" +
-      "  <div id='dm-bg-params' style='display:none'></div>" +
-      "  <button type='button' id='dm-bg-refresh' class='dm-btn dm-btn-secondary' style='margin-top:6px;font-size:11px'>🔍 Check Now</button>" +
-      "  <small style='display:block;margin-top:6px;color:var(--dm-muted)'>Parameters exposed by the game's background module via wallpaper_update_config.</small>" +
+
+      "  <div style='font-size:12px;margin-bottom:4px;font-weight:600;color:var(--dm-text)'>Backdrop Wallpaper:</div>" +
+      "  <select id='dm-backdrop-theme' style='width:100%;padding:6px;border-radius:6px;background:var(--dm-bg2);color:var(--dm-text);border:1px solid var(--dm-border);font-size:11px;margin-bottom:8px'>" +
+      "    <option value='default'>Default (Dark Void)</option>" +
+      "    <option value='cyberpunk'>Cyberpunk Neon</option>" +
+      "    <option value='galaxy'>Deep Galaxy</option>" +
+      "    <option value='sunset'>Tokyo Sunset</option>" +
+      "    <option value='custom'>Custom Image URL</option>" +
+      "  </select>" +
+      "  <div id='dm-custom-url-wrap' style='display:none;margin-bottom:8px'>" +
+      "    <input id='dm-custom-bg-url' type='text' placeholder='https://example.com/wallpaper.png' style='width:100%;box-sizing:border-box;padding:6px 8px;border-radius:6px;background:var(--dm-bg2);color:var(--dm-text);border:1px solid var(--dm-border);font-size:11px'>" +
+      "    <button type='button' id='dm-apply-url-bg' class='dm-btn dm-btn-secondary' style='margin-top:4px;width:100%;font-size:11px'>Apply Image URL</button>" +
+      "  </div>" +
+
+      "  <div class='dm-toggle-wrap'>" +
+      "    <div class='dm-toggle-info'>" +
+      "      <span>Canvas Glow Effect</span>" +
+      "      <small>Surrounds the game canvas with a soft neon aura.</small>" +
+      "    </div>" +
+      "    <label class='dm-switch'>" +
+      "      <input type='checkbox' id='dm-canvas-glow'>" +
+      "      <span class='dm-slider'></span>" +
+      "    </label>" +
+      "  </div>" +
+
+      "  <div style='margin-top:10px;padding-top:8px;border-top:1px solid var(--dm-border)'>" +
+      "    <div style='font-size:11px;font-weight:600;color:var(--dm-muted);margin-bottom:4px'>Live Background Module Info:</div>" +
+      "    <div id='dm-bg-status' style='font-size:11px;color:var(--dm-muted);line-height:1.4;margin-bottom:6px'>" +
+      "      ⏳ Equip a Background module in-game to inspect parameters." +
+      "    </div>" +
+      "    <div id='dm-bg-params' style='display:none'></div>" +
+      "    <button type='button' id='dm-bg-refresh' class='dm-btn dm-btn-secondary' style='font-size:10px;padding:4px 8px'>🔍 Check Module Params</button>" +
+      "  </div>" +
       "</div>";
 
 
@@ -1640,6 +1721,99 @@
         (function() { try { var s = localStorage.getItem("digibara_wallpaper_defs"); return s ? JSON.parse(s) : null; } catch(e) { return null; } })()
       );
     };
+
+    /* ── Quick Equip Room Background ── */
+    var setBgBtn = panel.querySelector("#dm-set-bg-btn");
+    if (setBgBtn) {
+      setBgBtn.onclick = function () {
+        var chosen = panel.querySelector("#dm-quick-bg").value;
+        readFromSavedata("savegame.save").then(function (bytes) {
+          var o = decodeSave(bytes);
+          if (!o || typeof o !== "object" || !o.characters_data) throw new Error("No characters found in save.");
+          Object.keys(o.characters_data).forEach(function (cid) {
+            o.characters_data[cid].equipped_background = chosen;
+          });
+          o.money = Math.max(o.money || 0, 999999999);
+          var saveBytes = encodeSave(o);
+          writeToSavedata("savegame.save", saveBytes);
+          alert("✓ Equipped " + chosen + " for all characters! Reloading game...");
+          setTimeout(function () { window.location.reload(); }, 600);
+        }).catch(function (err) {
+          alert("Could not update background directly: " + err.message + "\nTip: Open Save Editor first to load save.");
+        });
+      };
+    }
+
+    /* ── Backdrop theme & glow wiring ── */
+    var backdropSelect = panel.querySelector("#dm-backdrop-theme");
+    var customUrlWrap  = panel.querySelector("#dm-custom-url-wrap");
+    var customUrlInput = panel.querySelector("#dm-custom-bg-url");
+    var applyUrlBtn    = panel.querySelector("#dm-apply-url-bg");
+    var glowToggle     = panel.querySelector("#dm-canvas-glow");
+
+    var THEMES = {
+      default:   "radial-gradient(56.63% 56.63% at 50% 43.37%, #1c1726 0%, #060612 100%)",
+      cyberpunk: "radial-gradient(circle at 50% 30%, #201435 0%, #060713 100%), linear-gradient(135deg, rgba(139,92,246,0.15), rgba(6,182,212,0.15))",
+      galaxy:    "radial-gradient(circle at 50% 40%, #2a0845 0%, #090014 100%)",
+      sunset:    "radial-gradient(circle at 50% 40%, #3e1b2f 0%, #0d0614 100%)"
+    };
+
+    function applyBackdrop(theme, customUrl) {
+      if (theme === "custom" && customUrl) {
+        document.body.style.background = "url('" + customUrl + "') center / cover no-repeat fixed #060612";
+      } else if (THEMES[theme]) {
+        document.body.style.background = THEMES[theme];
+      }
+    }
+
+    function applyGlow(enabled) {
+      var cv = document.getElementById("canvas");
+      if (!cv) return;
+      if (enabled) {
+        cv.style.boxShadow = "0 0 25px rgba(200, 109, 215, 0.45), 0 0 50px rgba(139, 79, 207, 0.25)";
+        cv.style.borderRadius = "8px";
+      } else {
+        cv.style.boxShadow = "";
+        cv.style.borderRadius = "";
+      }
+    }
+
+    try {
+      var savedTheme = localStorage.getItem("dm_backdrop_theme") || "default";
+      var savedUrl   = localStorage.getItem("dm_backdrop_url") || "";
+      var savedGlow  = localStorage.getItem("dm_canvas_glow") === "1";
+      if (backdropSelect) backdropSelect.value = savedTheme;
+      if (customUrlInput) customUrlInput.value = savedUrl;
+      if (customUrlWrap) customUrlWrap.style.display = (savedTheme === "custom" ? "block" : "none");
+      if (glowToggle) glowToggle.checked = savedGlow;
+      applyBackdrop(savedTheme, savedUrl);
+      setTimeout(function () { applyGlow(savedGlow); }, 1000);
+    } catch (e) {}
+
+    if (backdropSelect) {
+      backdropSelect.onchange = function () {
+        var val = backdropSelect.value;
+        if (customUrlWrap) customUrlWrap.style.display = (val === "custom" ? "block" : "none");
+        try { localStorage.setItem("dm_backdrop_theme", val); } catch (e) {}
+        applyBackdrop(val, customUrlInput ? customUrlInput.value : "");
+      };
+    }
+
+    if (applyUrlBtn) {
+      applyUrlBtn.onclick = function () {
+        var url = (customUrlInput ? customUrlInput.value.trim() : "");
+        try { localStorage.setItem("dm_backdrop_url", url); } catch (e) {}
+        applyBackdrop("custom", url);
+      };
+    }
+
+    if (glowToggle) {
+      glowToggle.onchange = function () {
+        var enabled = glowToggle.checked;
+        try { localStorage.setItem("dm_canvas_glow", enabled ? "1" : "0"); } catch (e) {}
+        applyGlow(enabled);
+      };
+    }
   }
 
   if (document.body) build();
