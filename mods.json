@@ -1,0 +1,10 @@
+{
+  "level_mult": 1.0,
+  "game_speed": 1,
+  "unlock_patreon": true,
+  "inf_money": true,
+  "inf_tank": true,
+  "no_offline_penalty": false,
+  "max_stats": true,
+  "remove_char_limit": true
+}
