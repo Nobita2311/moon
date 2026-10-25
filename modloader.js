@@ -2,77 +2,81 @@
 (function () {
   /* ═══════════════════════════════════════════════════════════════
      §0  CUSTOM IN-GAME ROOM BACKGROUND ENGINE
-         Strategy: transparent WebGL canvas + DOM overlay div behind it.
-         - Force WebGL alpha:true so the canvas is transparent.
-         - Override clearColor so the room clear sets alpha=0.
-         - Sprites/UI remain fully opaque (GameMaker outputs alpha=1).
-         - A sibling <div> behind the canvas shows the user's image.
+         Strategy: Transparent canvas screen clear + Canvas CSS background
+         - Canvas WebGL context gets alpha:true.
+         - Room background image is set directly as canvas CSS background-image
+           with background-color: transparent.
+         - During game bootup (assets, shaders, fonts compilation), hooks stay IDLE
+           so font texture atlases and offscreen surfaces are NEVER corrupted.
+         - Once the game is ready and rendering the room, when GameMaker clears the
+           main canvas screen to black (Background Black room clear), we clear to
+           rgba(0,0,0,0).
+         - The transparent room clear shows the canvas CSS background image behind
+           the character and all room elements!
+         - Sprites and UI draw with full opacity on top.
      ═══════════════════════════════════════════════════════════════ */
   var _customRoomBg = null;
   try { _customRoomBg = localStorage.getItem("dm_custom_room_bg"); } catch (e) {}
   window._digibara_custom_room_bg = !!_customRoomBg;
 
-  /* ── DOM overlay div ── */
-  var _bgDiv = null;
+  var _gameReady = false;
 
-  function ensureBgDiv() {
-    if (_bgDiv) return _bgDiv;
+  // Track when the game finishes loading so we NEVER touch bootloader / font generation
+  function monitorGameLoad() {
+    if (_gameReady) return;
+    var sp = document.getElementById("spinner");
     var cv = document.getElementById("canvas");
-    if (!cv || !cv.parentNode) return null;
-    _bgDiv = document.createElement("div");
-    _bgDiv.id = "dm-room-bg-div";
-    _bgDiv.style.cssText = [
-      "position:absolute",
-      "top:0", "left:0", "width:100%", "height:100%",
-      "background-size:cover",
-      "background-position:center",
-      "background-repeat:no-repeat",
-      "pointer-events:none",
-      "z-index:0"
-    ].join(";");
-    // Insert before the canvas so it sits behind it
-    cv.parentNode.insertBefore(_bgDiv, cv);
-    // Make canvas stacking context sit above the div
-    cv.style.position = "relative";
-    cv.style.zIndex = "1";
-    return _bgDiv;
-  }
-
-  function applyRoomBgDiv(url) {
-    window._digibara_custom_room_bg = !!url;
-    // Make sure the canvas parent is positioned so absolute child works
-    var cv = document.getElementById("canvas");
-    if (cv && cv.parentNode && getComputedStyle(cv.parentNode).position === "static") {
-      cv.parentNode.style.position = "relative";
+    // When spinner is gone and canvas is visible, game has finished loading assets
+    if (cv && cv.style.display === "block" && (!sp || sp.style.display === "none" || sp.hidden)) {
+      setTimeout(function () {
+        _gameReady = true;
+      }, 1000);
+      return;
     }
-    var div = ensureBgDiv();
-    if (!div) return;
+    requestAnimationFrame(monitorGameLoad);
+  }
+  requestAnimationFrame(monitorGameLoad);
+  setTimeout(function () { _gameReady = true; }, 6000);
+
+  function applyRoomBgToCanvas(url) {
+    window._digibara_custom_room_bg = !!url;
+    var cv = document.getElementById("canvas");
+    // Clean up any legacy overlay div if present
+    var oldDiv = document.getElementById("dm-room-bg-div");
+    if (oldDiv && oldDiv.parentNode) oldDiv.parentNode.removeChild(oldDiv);
+
+    if (!cv) return;
     if (url) {
-      div.style.backgroundImage = "url('" + url + "')";
-      div.style.display = "block";
+      cv.style.setProperty("background-image", "url('" + url + "')", "important");
+      cv.style.setProperty("background-size", "cover", "important");
+      cv.style.setProperty("background-position", "center", "important");
+      cv.style.setProperty("background-repeat", "no-repeat", "important");
+      cv.style.setProperty("background-color", "transparent", "important");
     } else {
-      div.style.backgroundImage = "";
-      div.style.display = "none";
+      cv.style.removeProperty("background-image");
+      cv.style.removeProperty("background-size");
+      cv.style.removeProperty("background-position");
+      cv.style.removeProperty("background-repeat");
+      cv.style.setProperty("background-color", "black", "important");
     }
   }
 
   function loadCustomRoomBgImage(url) {
-    applyRoomBgDiv(url);
+    applyRoomBgToCanvas(url);
   }
 
   if (_customRoomBg) {
     if (document.readyState !== "loading") {
-      applyRoomBgDiv(_customRoomBg);
+      applyRoomBgToCanvas(_customRoomBg);
     } else {
       document.addEventListener("DOMContentLoaded", function () {
-        applyRoomBgDiv(_customRoomBg);
+        applyRoomBgToCanvas(_customRoomBg);
       });
     }
-    // Also retry once game canvas appears
     var _bgInitInterval = setInterval(function () {
       var cv = document.getElementById("canvas");
-      if (cv && cv.parentNode) {
-        applyRoomBgDiv(_customRoomBg);
+      if (cv) {
+        applyRoomBgToCanvas(_customRoomBg);
         clearInterval(_bgInitInterval);
       }
     }, 200);
@@ -123,17 +127,15 @@
   }
 
   /* ── WebGL transparency hook ──
-     Force alpha:true on the game canvas WebGL context.
-     Then intercept clearColor: when the game sets it to black (room bg),
-     we override it to rgba(0,0,0,0) so the canvas is transparent there,
-     revealing the DOM div behind it. Sprites draw at full alpha=1 on top.
+     1. Force alpha:true on the game canvas WebGL context.
+     2. Wait until the game has fully booted (_gameReady is true) before intercepting.
+     3. Only intercept clearColor when clearing the MAIN canvas framebuffer (not offscreen textures/fonts).
+     4. NEVER touch colorMask!
   */
   try {
     var _origGetContext = HTMLCanvasElement.prototype.getContext;
     HTMLCanvasElement.prototype.getContext = function (type, attrs) {
       var isGameCanvas = this && (this.id === "canvas" || (this.classList && this.classList.contains("emscripten")));
-      // Force alpha:true for the game canvas WebGL context so transparent
-      // room-clear pixels show the DOM div behind the canvas.
       if (isGameCanvas && typeof type === "string" && type.indexOf("webgl") !== -1) {
         var newAttrs = {};
         if (attrs && typeof attrs === "object") {
@@ -142,32 +144,23 @@
           }
         }
         newAttrs.alpha = true;
-        // Do NOT override premultipliedAlpha — GameMaker needs it at its default
         attrs = newAttrs;
       }
       var ctx = _origGetContext.call(this, type, attrs);
       if (isGameCanvas && ctx && !ctx._dm_bg_hooked && typeof ctx.clearColor === "function") {
         ctx._dm_bg_hooked = true;
-        var _gl = ctx;
         var _origClearColor = ctx.clearColor.bind(ctx);
-        var _origColorMask = ctx.colorMask.bind(ctx);
-        var _roomIsClear = false;
 
         ctx.clearColor = function (r, g, b, a) {
-          if (window._digibara_custom_room_bg && r < 0.08 && g < 0.08 && b < 0.08) {
-            _roomIsClear = true;
-            return _origClearColor(0, 0, 0, 0);
+          if (_gameReady && window._digibara_custom_room_bg && r < 0.08 && g < 0.08 && b < 0.08) {
+            // Check that the default screen framebuffer is bound (not offscreen surface/font cache)
+            var fbo = null;
+            try { fbo = ctx.getParameter(ctx.FRAMEBUFFER_BINDING); } catch (e) {}
+            if (!fbo) {
+              return _origClearColor(0, 0, 0, 0);
+            }
           }
-          _roomIsClear = false;
           return _origClearColor(r, g, b, a);
-        };
-
-        // Ensure the alpha channel is always written when doing a room clear
-        ctx.colorMask = function (r, g, b, a) {
-          if (window._digibara_custom_room_bg && _roomIsClear) {
-            return _origColorMask(r, g, b, true);
-          }
-          return _origColorMask(r, g, b, a);
         };
       }
       return ctx;
@@ -1840,9 +1833,11 @@
         console.warn("Storage quota exceeded", ex);
       }
       _customRoomBg = url;
+      window._digibara_custom_room_bg = true;
       loadCustomRoomBgImage(url);
       updatePreview(url);
-      alert("✓ Custom room background applied! It will appear behind the character in-game.\nIf you don't see it yet, reload the page once.");
+      ensureBackgroundBlackInSave();
+      alert("✓ Custom room background applied! It will appear behind the character in-game.");
     }
 
     function clearCustomRoomBg() {
