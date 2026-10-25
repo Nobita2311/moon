@@ -2299,11 +2299,11 @@
       ".dm-nudge-center:hover{background:rgba(255,217,138,.2);border-color:var(--dm-gold)}",
       ".dm-step-btn{padding:4px 9px;font-size:11px;font-weight:700;border-radius:6px;border:1px solid var(--dm-border);background:var(--dm-bg2);color:var(--dm-muted);cursor:pointer;transition:all .15s}",
       ".dm-step-btn:hover{color:var(--dm-text);background:var(--dm-bg3)}",
-      ".dm-step-btn.active{background:var(--dm-accent);color:#fff;border-color:var(--dm-accent)},
+      ".dm-step-btn.active{background:var(--dm-accent);color:#fff;border-color:var(--dm-accent)}",
 
       /* Enable normal typing and text selection on all mod inputs */
       "#dm-panel input, #dm-panel select, #dm-panel textarea{user-select:text !important;-webkit-user-select:text !important;cursor:text !important;pointer-events:auto !important;}",
-      "#dm-panel input:focus, #dm-panel select:focus, #dm-panel textarea:focus{outline:none;border-color:var(--dm-accent);box-shadow:0 0 0 2px rgba(200,109,215,.3)}" ",
+      "#dm-panel input:focus, #dm-panel select:focus, #dm-panel textarea:focus{outline:none;border-color:var(--dm-accent);box-shadow:0 0 0 2px rgba(200,109,215,.3)}",
 
       /* Toast Notification */
       "#dm-toast{position:fixed;top:20px;left:50%;transform:translateX(-50%);z-index:999999;padding:10px 18px;border-radius:8px;font:700 13px 'Segoe UI',Arial;display:none;box-shadow:0 8px 30px rgba(0,0,0,0.85);border:1px solid;pointer-events:none;transition:all .2s;text-align:center;max-width:90vw}",
@@ -2748,6 +2748,98 @@
       "      <button type='button' id='dm-etc-hygiene-btn' class='dm-btn dm-btn-secondary' style='font-size:10px;padding:7px'>🧼 Max Hygiene</button>" +
       "      <button type='button' id='dm-etc-satiety-btn' class='dm-btn dm-btn-secondary' style='font-size:10px;padding:7px'>🍔 Max Satiety</button>" +
       "      <button type='button' id='dm-etc-horny-btn' class='dm-btn dm-btn-secondary' style='font-size:10px;padding:7px'>❤️ Max Horny</button>" +
+      "    </div>" +
+      "  </div>" +
+      "</div>" +
+
+      /* Section 11: Optimization, Effects & FPS Boost */
+      "<div class='dm-section'>" +
+      "  <div class='dm-sec-title'>⚡ Effects, Animations &amp; Optimization</div>" +
+      "  <p style='font-size:11px;color:var(--dm-muted);margin:0 0 10px;line-height:1.4'>" +
+      "    Disable heavy animations, screen shake, particles, and filters to maximize FPS and eliminate lag." +
+      "  </p>" +
+
+      "  <div style='background:var(--dm-bg2);border:1px solid var(--dm-border);border-radius:8px;padding:10px;margin-bottom:10px'>" +
+      "    <div style='display:flex;gap:6px;margin-bottom:12px'>" +
+      "      <button type='button' id='dm-opt-max-perf' class='dm-btn dm-btn-primary' style='flex:1;font-size:11px;padding:8px'>⚡ Max Performance (Potato Mode)</button>" +
+      "      <button type='button' id='dm-opt-reset' class='dm-btn dm-btn-secondary' style='font-size:11px;padding:8px'>↩ Default</button>" +
+      "    </div>" +
+
+      "    <div class='dm-toggle-wrap'>" +
+      "      <div class='dm-toggle-info'>" +
+      "        <span>Disable Screen Shake &amp; Wobble</span>" +
+      "        <small>Locks canvas transform to eliminate camera shaking &amp; jitter.</small>" +
+      "      </div>" +
+      "      <label class='dm-switch'>" +
+      "        <input type='checkbox' id='dm-opt-shake'>" +
+      "        <span class='dm-slider'></span>" +
+      "      </label>" +
+      "    </div>" +
+
+      "    <div class='dm-toggle-wrap'>" +
+      "      <div class='dm-toggle-info'>" +
+      "        <span>Disable Ambient Particles &amp; Sweat</span>" +
+      "        <small>Suppresses floating sweat droplets, musk, and particles.</small>" +
+      "      </div>" +
+      "      <label class='dm-switch'>" +
+      "        <input type='checkbox' id='dm-opt-particles'>" +
+      "        <span class='dm-slider'></span>" +
+      "      </label>" +
+      "    </div>" +
+
+      "    <div class='dm-toggle-wrap'>" +
+      "      <div class='dm-toggle-info'>" +
+      "        <span>Disable Glow &amp; Canvas Filters</span>" +
+      "        <small>Removes heavy shadow, glow aura, and blur post-processing.</small>" +
+      "      </div>" +
+      "      <label class='dm-switch'>" +
+      "        <input type='checkbox' id='dm-opt-glow'>" +
+      "        <span class='dm-slider'></span>" +
+      "      </label>" +
+      "    </div>" +
+
+      "    <div class='dm-toggle-wrap'>" +
+      "      <div class='dm-toggle-info'>" +
+      "        <span>Disable Room Backgrounds (Void Black)</span>" +
+      "        <small>Clears background to solid black to save GPU fill-rate.</small>" +
+      "      </div>" +
+      "      <label class='dm-switch'>" +
+      "        <input type='checkbox' id='dm-opt-bg'>" +
+      "        <span class='dm-slider'></span>" +
+      "      </label>" +
+      "    </div>" +
+
+      "    <div class='dm-toggle-wrap'>" +
+      "      <div class='dm-toggle-info'>" +
+      "        <span>Ultra-Low CPU Static Poses</span>" +
+      "        <small>Pauses continuous sprite wobble/breathing to save CPU cycles.</small>" +
+      "      </div>" +
+      "      <label class='dm-switch'>" +
+      "        <input type='checkbox' id='dm-opt-static'>" +
+      "        <span class='dm-slider'></span>" +
+      "      </label>" +
+      "    </div>" +
+
+      "    <div class='dm-toggle-wrap'>" +
+      "      <div class='dm-toggle-info'>" +
+      "        <span>Fast Pixelated Render Mode</span>" +
+      "        <small>Reduces texture interpolation overhead on mobile &amp; low-end GPUs.</small>" +
+      "      </div>" +
+      "      <label class='dm-switch'>" +
+      "        <input type='checkbox' id='dm-opt-pixel'>" +
+      "        <span class='dm-slider'></span>" +
+      "      </label>" +
+      "    </div>" +
+
+      "    <div class='dm-toggle-wrap'>" +
+      "      <div class='dm-toggle-info'>" +
+      "        <span>Mute Repetitive SFX Loops</span>" +
+      "        <small>Disables repetitive slapping / milking loops to reduce CPU audio load.</small>" +
+      "      </div>" +
+      "      <label class='dm-switch'>" +
+      "        <input type='checkbox' id='dm-opt-audio'>" +
+      "        <span class='dm-slider'></span>" +
+      "      </label>" +
       "    </div>" +
       "  </div>" +
       "</div>";
@@ -4101,6 +4193,147 @@
       }).catch(function () {});
     }, 1200);
 
+    /* ═══════════════════════════════════════════════════════════════
+       §12  EFFECTS, ANIMATIONS & OPTIMIZATION WIRING
+       ═══════════════════════════════════════════════════════════════ */
+    var OPTIM_STORAGE_KEY = "dm_optim_settings";
+    function getOptimSettings() {
+      try {
+        var s = localStorage.getItem(OPTIM_STORAGE_KEY);
+        if (s) return JSON.parse(s);
+      } catch (e) {}
+      return {
+        disable_shake:     false,
+        disable_particles: false,
+        disable_glow:      false,
+        disable_bg:        false,
+        static_poses:      false,
+        pixelated_render:  false,
+        mute_sfx:          false
+      };
+    }
+
+    function saveOptimSettings(opts) {
+      try {
+        localStorage.setItem(OPTIM_STORAGE_KEY, JSON.stringify(opts));
+      } catch (e) {}
+      applyOptimSettings(opts);
+    }
+
+    function applyOptimSettings(opts) {
+      var cv = document.getElementById("canvas");
+      if (!cv) return;
+
+      if (opts.disable_shake) {
+        cv.style.setProperty("transform", "none", "important");
+        cv.style.setProperty("animation", "none", "important");
+        cv.style.setProperty("transition", "none", "important");
+      } else {
+        cv.style.removeProperty("transform");
+        cv.style.removeProperty("animation");
+        cv.style.removeProperty("transition");
+      }
+
+      if (opts.disable_glow) {
+        cv.style.setProperty("box-shadow", "none", "important");
+        cv.style.setProperty("filter", "none", "important");
+      }
+
+      if (opts.pixelated_render) {
+        cv.style.imageRendering = "pixelated";
+      } else {
+        cv.style.imageRendering = "auto";
+      }
+
+      if (opts.disable_bg) {
+        ensureBackgroundBlackInSave();
+      }
+
+      window._dm_disable_particles = !!opts.disable_particles;
+      window._dm_static_poses      = !!opts.static_poses;
+
+      if (opts.mute_sfx) {
+        document.querySelectorAll("audio").forEach(function (a) { a.muted = true; });
+      }
+    }
+
+    var curOpt = getOptimSettings();
+    applyOptimSettings(curOpt);
+
+    var optShakeEl     = panel.querySelector("#dm-opt-shake");
+    var optPartEl      = panel.querySelector("#dm-opt-particles");
+    var optGlowEl      = panel.querySelector("#dm-opt-glow");
+    var optBgEl        = panel.querySelector("#dm-opt-bg");
+    var optStaticEl    = panel.querySelector("#dm-opt-static");
+    var optPixelEl     = panel.querySelector("#dm-opt-pixel");
+    var optAudioEl     = panel.querySelector("#dm-opt-audio");
+
+    var optMaxPerfBtn  = panel.querySelector("#dm-opt-max-perf");
+    var optResetBtn    = panel.querySelector("#dm-opt-reset");
+
+    function updateOptCheckboxes() {
+      if (optShakeEl) optShakeEl.checked = !!curOpt.disable_shake;
+      if (optPartEl) optPartEl.checked = !!curOpt.disable_particles;
+      if (optGlowEl) optGlowEl.checked = !!curOpt.disable_glow;
+      if (optBgEl) optBgEl.checked = !!curOpt.disable_bg;
+      if (optStaticEl) optStaticEl.checked = !!curOpt.static_poses;
+      if (optPixelEl) optPixelEl.checked = !!curOpt.pixelated_render;
+      if (optAudioEl) optAudioEl.checked = !!curOpt.mute_sfx;
+    }
+    updateOptCheckboxes();
+
+    function wireOpt(el, key) {
+      if (!el) return;
+      el.onchange = function () {
+        curOpt[key] = this.checked;
+        saveOptimSettings(curOpt);
+        showToast("✓ " + (this.checked ? "Enabled" : "Disabled") + " " + key.replace(/_/g, " "), false, false);
+      };
+    }
+
+    wireOpt(optShakeEl, "disable_shake");
+    wireOpt(optPartEl, "disable_particles");
+    wireOpt(optGlowEl, "disable_glow");
+    wireOpt(optBgEl, "disable_bg");
+    wireOpt(optStaticEl, "static_poses");
+    wireOpt(optPixelEl, "pixelated_render");
+    wireOpt(optAudioEl, "mute_sfx");
+
+    if (optMaxPerfBtn) {
+      optMaxPerfBtn.onclick = function () {
+        curOpt = {
+          disable_shake:     true,
+          disable_particles: true,
+          disable_glow:      true,
+          disable_bg:        true,
+          static_poses:      true,
+          pixelated_render:  true,
+          mute_sfx:          true
+        };
+        saveOptimSettings(curOpt);
+        updateOptCheckboxes();
+        showToast("⚡ Applied Ultra-Fast Max Performance Mode!", false, false);
+      };
+    }
+
+    if (optResetBtn) {
+      optResetBtn.onclick = function () {
+        curOpt = {
+          disable_shake:     false,
+          disable_particles: false,
+          disable_glow:      false,
+          disable_bg:        false,
+          static_poses:      false,
+          pixelated_render:  false,
+          mute_sfx:          false
+        };
+        saveOptimSettings(curOpt);
+        updateOptCheckboxes();
+        showToast("↩ Reset visual effects & optimization to Default.", false, false);
+      };
+    }
+
+    
     // Immediately trigger stat maxing if max_stats toggle is checked
     var maxStatsToggle = panel.querySelector("#dm-maxstats");
     if (maxStatsToggle) {
