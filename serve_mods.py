@@ -53,9 +53,6 @@ CHAR_LOCKED_OFF = 1860656
 CHAR_LOCKED_ORIG = bytes.fromhex("ffff5545151600a0")
 CHAR_LOCKED_PATCH = bytes.fromhex("00000f8400005407")
 
-# 3. 20-character import limits in scr_get_locked_imported_character_ids
-LIMIT_20_OFFS = [1860544, 1860564, 1860688]
-
 
 def load_cfg():
     cfg = dict(DEFAULTS)
@@ -90,9 +87,6 @@ def patched_unx(cfg):
             data[IMPORT_LIMIT_OFF:IMPORT_LIMIT_OFF+8] = IMPORT_LIMIT_PATCH
         if data[CHAR_LOCKED_OFF:CHAR_LOCKED_OFF+8] == CHAR_LOCKED_ORIG:
             data[CHAR_LOCKED_OFF:CHAR_LOCKED_OFF+8] = CHAR_LOCKED_PATCH
-        for off in LIMIT_20_OFFS:
-            if data[off:off+2] == b"\x14\x00":
-                data[off:off+2] = (32767).to_bytes(2, "little")
 
     return bytes(data)
 
