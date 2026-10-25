@@ -1,30 +1,150 @@
 /* DigiBara Mods — Extended Edition v3 (injected by serve_mods.py) */
 (function () {
   /* ═══════════════════════════════════════════════════════════════
-     §0  CUSTOM IN-GAME ROOM BACKGROUND ENGINE (WebGL Transparency)
+     §0  CUSTOM IN-GAME ROOM BACKGROUND ENGINE (WebGL Room Painter)
      ═══════════════════════════════════════════════════════════════ */
   var _customRoomBg = null;
   try { _customRoomBg = localStorage.getItem("dm_custom_room_bg"); } catch (e) {}
   window._digibara_custom_room_bg = !!_customRoomBg;
 
-  function applyRoomBgToCanvas(url) {
-    var cv = document.getElementById("canvas");
-    if (!cv) return;
-    if (url) {
-      window._digibara_custom_room_bg = true;
-      cv.style.setProperty("background-color", "transparent", "important");
-      cv.style.setProperty("background-image", "url('" + url + "')", "important");
-      cv.style.setProperty("background-size", "cover", "important");
-      cv.style.setProperty("background-position", "center", "important");
-      cv.style.setProperty("background-repeat", "no-repeat", "important");
-    } else {
-      window._digibara_custom_room_bg = false;
-      cv.style.removeProperty("background-image");
-      cv.style.removeProperty("background-size");
-      cv.style.removeProperty("background-position");
-      cv.style.removeProperty("background-repeat");
-      cv.style.setProperty("background-color", "black", "important");
+  var _bgImageElement = null;
+  var _bgTextureNeedsUpdate = false;
+  var _bgTexture = null;
+  var _bgShader = null;
+  var _bgQuadBuffer = null;
+  var _bgVAO = null;
+  var _lastClearWasBlack = false;
+  var _drawnThisFrame = false;
+
+  function loadCustomRoomBgImage(url) {
+    if (!url) {
+      _bgImageElement = null;
+      _bgTextureNeedsUpdate = true;
+      return;
     }
+    var img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = function () {
+      _bgImageElement = img;
+      _bgTextureNeedsUpdate = true;
+    };
+    img.src = url;
+  }
+
+  if (_customRoomBg) loadCustomRoomBgImage(_customRoomBg);
+
+  function resetFrameState() {
+    _drawnThisFrame = false;
+    requestAnimationFrame(resetFrameState);
+  }
+  requestAnimationFrame(resetFrameState);
+
+  function initBgRenderer(gl) {
+    if (_bgShader) return;
+    var vs = "attribute vec2 a_p; varying vec2 v_u; void main() { v_u = (a_p + 1.0) * 0.5; gl_Position = vec4(a_p, 0.0, 1.0); }";
+    var fs = "precision mediump float; varying vec2 v_u; uniform sampler2D u_t; void main() { gl_FragColor = texture2D(u_t, v_u); }";
+    function compile(type, src) {
+      var s = gl.createShader(type);
+      gl.shaderSource(s, src);
+      gl.compileShader(s);
+      return s;
+    }
+    var prog = gl.createProgram();
+    gl.attachShader(prog, compile(gl.VERTEX_SHADER, vs));
+    gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, fs));
+    gl.linkProgram(prog);
+    _bgShader = {
+      prog: prog,
+      a_p: gl.getAttribLocation(prog, "a_p"),
+      u_t: gl.getUniformLocation(prog, "u_t")
+    };
+
+    _bgQuadBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, _bgQuadBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+      -1, -1,
+       1, -1,
+      -1,  1,
+      -1,  1,
+       1, -1,
+       1,  1
+    ]), gl.STATIC_DRAW);
+    gl.bindBuffer(gl.ARRAY_BUFFER, null);
+
+    if (typeof gl.createVertexArray === "function") {
+      try {
+        _bgVAO = gl.createVertexArray();
+        gl.bindVertexArray(_bgVAO);
+        gl.bindBuffer(gl.ARRAY_BUFFER, _bgQuadBuffer);
+        gl.enableVertexAttribArray(_bgShader.a_p);
+        gl.vertexAttribPointer(_bgShader.a_p, 2, gl.FLOAT, false, 0, 0);
+        gl.bindVertexArray(null);
+      } catch (e) { _bgVAO = null; }
+    }
+  }
+
+  function drawCustomRoomBg(gl) {
+    if (!_bgImageElement) return;
+    initBgRenderer(gl);
+    if (!_bgShader) return;
+
+    if (_bgTextureNeedsUpdate) {
+      _bgTextureNeedsUpdate = false;
+      if (!_bgTexture) _bgTexture = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, _bgTexture);
+      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, _bgImageElement);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.bindTexture(gl.TEXTURE_2D, null);
+    }
+    if (!_bgTexture) return;
+
+    var prevProg = gl.getParameter(gl.CURRENT_PROGRAM);
+    var prevBuf = gl.getParameter(gl.ARRAY_BUFFER_BINDING);
+    var prevActTex = gl.getParameter(gl.ACTIVE_TEXTURE);
+    var prevTex = gl.getParameter(gl.TEXTURE_BINDING_2D);
+    var prevBlend = gl.isEnabled(gl.BLEND);
+    var prevDepth = gl.isEnabled(gl.DEPTH_TEST);
+    var prevScissor = gl.isEnabled(gl.SCISSOR_TEST);
+    var prevCull = gl.isEnabled(gl.CULL_FACE);
+    var prevMask = gl.getParameter(gl.COLOR_WRITEMASK);
+    var prevVAO = (typeof gl.bindVertexArray === "function") ? gl.getParameter(gl.VERTEX_ARRAY_BINDING) : null;
+
+    gl.disable(gl.BLEND);
+    gl.disable(gl.DEPTH_TEST);
+    gl.disable(gl.SCISSOR_TEST);
+    gl.disable(gl.CULL_FACE);
+    gl.colorMask(true, true, true, true);
+
+    gl.useProgram(_bgShader.prog);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, _bgTexture);
+    gl.uniform1i(_bgShader.u_t, 0);
+
+    if (_bgVAO && typeof gl.bindVertexArray === "function") {
+      gl.bindVertexArray(_bgVAO);
+      gl.drawArrays(gl.TRIANGLES, 0, 6);
+      gl.bindVertexArray(prevVAO);
+    } else {
+      gl.bindBuffer(gl.ARRAY_BUFFER, _bgQuadBuffer);
+      gl.enableVertexAttribArray(_bgShader.a_p);
+      gl.vertexAttribPointer(_bgShader.a_p, 2, gl.FLOAT, false, 0, 0);
+      gl.drawArrays(gl.TRIANGLES, 0, 6);
+      gl.disableVertexAttribArray(_bgShader.a_p);
+      gl.bindBuffer(gl.ARRAY_BUFFER, prevBuf);
+    }
+
+    gl.activeTexture(prevActTex);
+    gl.bindTexture(gl.TEXTURE_2D, prevTex);
+    gl.useProgram(prevProg);
+    gl.colorMask(prevMask[0], prevMask[1], prevMask[2], prevMask[3]);
+    if (prevBlend) gl.enable(gl.BLEND);
+    if (prevDepth) gl.enable(gl.DEPTH_TEST);
+    if (prevScissor) gl.enable(gl.SCISSOR_TEST);
+    if (prevCull) gl.enable(gl.CULL_FACE);
   }
 
   function compressAndProcessImage(fileOrBlob, maxWidth, maxHeight, quality, callback) {
@@ -34,18 +154,23 @@
         var img = new Image();
         img.onload = function () {
           try {
-            var w = img.width;
-            var h = img.height;
-            if (w > maxWidth || h > maxHeight) {
-              var ratio = Math.min(maxWidth / w, maxHeight / h);
-              w = Math.round(w * ratio);
-              h = Math.round(h * ratio);
-            }
+            var targetW = 1080;
+            var targetH = 1920;
             var c = document.createElement("canvas");
-            c.width = w;
-            c.height = h;
+            c.width = targetW;
+            c.height = targetH;
             var ctx = c.getContext("2d");
-            ctx.drawImage(img, 0, 0, w, h);
+
+            // Cover fit (center & crop if needed without distortion)
+            var imgW = img.width;
+            var imgH = img.height;
+            var scale = Math.max(targetW / imgW, targetH / imgH);
+            var drawW = imgW * scale;
+            var drawH = imgH * scale;
+            var drawX = (targetW - drawW) / 2;
+            var drawY = (targetH - drawH) / 2;
+
+            ctx.drawImage(img, drawX, drawY, drawW, drawH);
             var compressedDataUrl = c.toDataURL("image/jpeg", quality || 0.85);
             callback(null, compressedDataUrl);
           } catch (err) {
@@ -70,62 +195,32 @@
     var _origGetContext = HTMLCanvasElement.prototype.getContext;
     HTMLCanvasElement.prototype.getContext = function (type, attrs) {
       var isGameCanvas = this && (this.id === "canvas" || (this.classList && this.classList.contains("emscripten")));
-      if (isGameCanvas && typeof type === "string" && type.indexOf("webgl") !== -1) {
-        var newAttrs = {};
-        if (attrs && typeof attrs === "object") {
-          for (var k in attrs) {
-            if (Object.prototype.hasOwnProperty.call(attrs, k)) newAttrs[k] = attrs[k];
-          }
-        }
-        newAttrs.alpha = true;
-        attrs = newAttrs;
-      }
       var ctx = _origGetContext.call(this, type, attrs);
-      if (isGameCanvas && ctx && !ctx._dm_hooked && typeof ctx.clearColor === "function") {
-        ctx._dm_hooked = true;
+      if (isGameCanvas && ctx && !ctx._dm_bg_hooked && typeof ctx.clearColor === "function") {
+        ctx._dm_bg_hooked = true;
         var _origClearColor = ctx.clearColor.bind(ctx);
         var _origClear = ctx.clear.bind(ctx);
-        var _origColorMask = typeof ctx.colorMask === "function" ? ctx.colorMask.bind(ctx) : null;
-
-        if (_origColorMask) {
-          ctx.colorMask = function (r, g, b, a) {
-            if (window._digibara_custom_room_bg) a = true;
-            return _origColorMask(r, g, b, a);
-          };
-        }
 
         ctx.clearColor = function (r, g, b, a) {
-          if (window._digibara_custom_room_bg) {
-            // When game clears to dark/black room background, clear to transparent
-            if (r < 0.08 && g < 0.08 && b < 0.08) {
-              return _origClearColor(0, 0, 0, 0);
-            }
-          }
+          _lastClearWasBlack = (r < 0.08 && g < 0.08 && b < 0.08);
           return _origClearColor(r, g, b, a);
         };
 
         ctx.clear = function (mask) {
-          if (window._digibara_custom_room_bg && (mask & 16384)) {
-            if (_origColorMask) try { _origColorMask(true, true, true, true); } catch (e) {}
+          var res = _origClear(mask);
+          if (window._digibara_custom_room_bg && _lastClearWasBlack && !_drawnThisFrame && (mask & 16384)) {
+            var vp = ctx.getParameter(ctx.VIEWPORT);
+            if (vp && vp[2] >= 300 && vp[3] >= 300) {
+              _drawnThisFrame = true;
+              try { drawCustomRoomBg(ctx); } catch (e) { console.warn(e); }
+            }
           }
-          return _origClear(mask);
+          return res;
         };
       }
       return ctx;
     };
   } catch (e) {}
-
-  window.addEventListener("DOMContentLoaded", function () {
-    if (_customRoomBg) applyRoomBgToCanvas(_customRoomBg);
-  });
-  setInterval(function () {
-    if (window._digibara_custom_room_bg && _customRoomBg) {
-      var cv = document.getElementById("canvas");
-      if (cv && (!cv.style.backgroundImage || cv.style.backgroundColor !== "transparent")) {
-        applyRoomBgToCanvas(_customRoomBg);
-      }
-    }
-  }, 1000);
 
   /* ═══════════════════════════════════════════════════════════════
      §1  VIRTUAL CLOCK (Game Speed Multiplier)
@@ -1794,7 +1889,7 @@
       }
       _customRoomBg = url;
       window._digibara_custom_room_bg = true;
-      applyRoomBgToCanvas(url);
+      loadCustomRoomBgImage(url);
       updatePreview(url);
 
       ensureBackgroundBlackInSave().then(function (changed) {
@@ -1811,7 +1906,7 @@
       try { localStorage.removeItem("dm_custom_room_bg"); } catch (e) {}
       _customRoomBg = null;
       window._digibara_custom_room_bg = false;
-      applyRoomBgToCanvas(null);
+      loadCustomRoomBgImage(null);
       updatePreview(null);
       if (customUrlInput) customUrlInput.value = "";
     }
