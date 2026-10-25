@@ -263,6 +263,10 @@
   var _registeredSpriteKeys = {};
   var _currentNudgeStep = 5;
   var _activeAlignTarget = "dick_horny";
+  var _activeCharacterId = "mead_marvin"; // Default to Marvin (or detected live)
+
+  // Compact precomputed sprite geometry catalog for all 10 official characters [minX, minY, maxX, maxY]
+  var CHAR_SPRITE_CATALOG = {"shamieroe_captain":{"dick_foreskin":[0,0,246,292],"belly_big":[237,878,862,1775],"belly_small":[276,887,816,1775],"body_idle":[0,106,1080,1677],"butt_background":[388,551,695,1262],"butt_cheek_left":[53,473,567,1104],"butt_cheek_right":[517,469,1031,1100],"butt_hole":[508,862,572,965],"foot_idle":[63,516,503,1321],"eyes_horny":[464,268,638,406],"eyes_horny_2":[456,272,644,475],"eyes_idle":[463,273,638,392],"eyes_idle_2":[459,275,640,389],"balls_left":[386,1341,628,1586],"balls_right":[475,1346,645,1594],"dick_horny":[238,929,621,1488],"dick_idle":[332,1240,639,1611],"mouth_horny":[497,406,602,448],"mouth_horny_2":[491,399,614,496],"mouth_idle":[503,413,605,435],"mouth_laugh":[487,405,605,448],"mouth_speak":[501,414,599,434],"mouth_tired":[521,414,579,461]},"thebluemon_ignacio":{"dick_foreskin":[0,0,246,245],"belly_big":[196,791,884,1341],"belly_small":[260,919,820,1288],"body_idle":[0,160,1080,1647],"butt_background":[390,554,695,1261],"butt_cheek_left":[53,473,567,1104],"butt_cheek_right":[514,471,1028,1102],"butt_hole":[510,865,571,953],"foot_idle":[50,505,517,1394],"eyes_horny":[459,308,625,366],"eyes_horny_2":[459,308,625,366],"eyes_idle":[455,309,623,363],"eyes_idle_2":[455,309,623,366],"balls_left":[328,1294,746,1657],"dick_horny":[193,772,568,1415],"dick_idle":[108,1292,576,1550],"mouth_horny":[486,436,597,464],"mouth_horny_2":[516,434,563,467],"mouth_idle":[500,435,587,455],"mouth_laugh":[496,430,590,467],"mouth_speak":[497,437,588,462],"mouth_tired":[518,435,565,463],"outfit":[0,195,1080,1291]},"d44_sager":{"balls_left":[305,1360,668,1631],"balls_right":[488,1380,776,1632],"dick_horny":[278,750,642,1488],"dick_idle":[142,1271,675,1570],"belly_big":[212,850,876,1296],"belly_small":[242,998,848,1299],"body_idle":[0,131,1080,1642],"butt_background":[378,600,713,1311],"butt_cheek_left":[39,478,579,1124],"butt_cheek_right":[533,479,1066,1126],"butt_hole":[527,806,580,893],"foot_idle":[82,502,485,1328],"eyes_horny":[319,93,416,398],"eyes_horny_2":[704,113,786,263],"mouth_horny":[543,478,550,486],"mouth_horny_2":[543,478,550,486],"mouth_idle":[543,478,550,486],"mouth_laugh":[543,478,550,486],"mouth_speak":[543,478,550,486],"mouth_tired":[543,478,550,486]},"g00meva_theguy":{"balls_left":[476,1544,479,1546],"balls_right":[578,1448,583,1464],"dick_foreskin":[1,0,140,112],"dick_horny":[384,1030,624,1568],"dick_idle":[395,1262,623,1568],"belly_big":[259,756,818,1548],"belly_small":[296,830,784,1372],"body_idle":[0,199,1080,1639],"butt_background":[0,552,897,1286],"butt_cheek_left":[4,480,563,1150],"butt_cheek_right":[519,480,1078,1150],"butt_hole":[493,860,594,997],"foot_idle":[96,492,490,1324],"eyes_horny":[401,321,680,447],"eyes_horny_2":[401,324,680,447],"eyes_idle":[401,321,680,447],"eyes_idle_2":[401,323,680,447],"mouth_horny":[484,418,601,497],"mouth_horny_2":[493,428,590,503],"mouth_idle":[496,438,592,493],"mouth_laugh":[489,430,593,493],"mouth_speak":[489,433,594,492],"mouth_tired":[497,433,586,517],"outfit":[0,128,1080,1779],"outfit_2":[0,128,1080,1779],"outfit_3":[0,120,1080,1779],"outfit_4":[0,155,1080,1779],"outfit_5":[0,128,1080,1779],"outfit_6":[0,0,1080,1789],"outfit_7":[0,0,1080,1789]},"konguipeach_himboy":{"belly_big":[214,860,866,1356],"belly_small":[268,899,812,1291],"body_idle":[0,142,1080,1661],"butt_background":[301,536,779,1376],"butt_cheek_left":[23,467,555,1117],"butt_cheek_right":[525,467,1057,1117],"butt_hole":[476,841,607,967],"foot_idle":[99,461,504,1360],"eyes_horny":[254,192,818,433],"eyes_horny_2":[439,308,641,385],"eyes_idle":[444,316,636,382],"eyes_idle_2":[439,312,641,385],"balls_left":[325,1328,663,1664],"balls_right":[500,1290,784,1662],"dick_horny":[264,889,669,1558],"dick_idle":[132,1301,615,1567],"mouth_horny":[493,423,587,475],"mouth_horny_2":[493,427,587,482],"mouth_idle":[493,426,587,473],"mouth_laugh":[493,416,587,503],"mouth_speak":[493,426,587,476],"mouth_tired":[236,225,587,476],"outfit":[172,166,908,1008],"outfit_2":[0,170,1080,1725]},"krok_matt":{"balls_left":[296,1344,614,1627],"balls_right":[452,1355,802,1651],"dick_horny":[198,637,637,1533],"dick_idle":[166,1313,581,1549],"belly_big":[177,823,903,1368],"belly_small":[215,907,865,1302],"body_idle":[0,111,1080,1734],"butt_background":[363,542,725,1329],"butt_cheek_left":[50,479,568,1118],"butt_cheek_right":[512,479,1030,1118],"butt_hole":[509,875,570,962],"foot_idle":[73,516,490,1321],"eyes_horny":[444,271,630,331],"eyes_horny_2":[444,271,630,340],"eyes_idle":[446,278,634,334],"eyes_idle_2":[446,278,634,332],"mouth_horny":[494,403,588,455],"mouth_horny_2":[487,407,598,451],"mouth_idle":[487,407,593,453],"mouth_laugh":[477,402,603,462],"mouth_speak":[487,406,593,453],"mouth_tired":[347,358,593,470]},"mead_marvin":{"balls_left":[336,1497,522,1728],"balls_right":[472,1450,658,1684],"dick_horny":[219,934,565,1462],"dick_idle":[360,1296,570,1542],"belly_big":[171,754,894,1270],"belly_small":[276,807,790,1267],"body_idle":[0,182,1080,1685],"butt_background":[348,359,662,1184],"butt_cheek_left":[61,482,569,1107],"butt_cheek_right":[510,482,1018,1107],"butt_hole":[510,873,570,961],"foot_idle":[58,515,500,1324],"outfit":[10,309,1066,1043],"eyes_horny":[468,341,622,406],"eyes_horny_2":[462,323,630,410],"eyes_idle":[462,323,630,410],"eyes_idle_2":[468,326,622,407],"mouth_horny":[513,452,576,478],"mouth_horny_2":[504,408,579,484],"mouth_idle":[513,456,573,478],"mouth_laugh":[505,447,577,482],"mouth_speak":[504,408,579,484],"mouth_tired":[509,457,569,496]},"pintplows_pint":{"belly_big":[241,725,864,1285],"belly_small":[342,736,753,1290],"body_idle":[0,63,1080,1686],"butt_background":[305,0,777,1134],"butt_cheek_left":[27,424,619,1140],"butt_cheek_right":[488,385,1080,1140],"butt_hole":[518,736,582,858],"eyes_horny":[460,195,641,258],"eyes_horny_2":[467,204,634,255],"eyes_idle":[462,196,641,257],"eyes_idle_2":[462,203,640,249],"dick_horny":[140,852,552,1451],"dick_horny_2":[538,840,935,1451],"dick_idle":[119,1319,547,1725],"dick_idle_2":[539,1325,960,1744],"mouth_horny":[473,294,625,337],"mouth_horny_2":[475,295,628,470],"mouth_idle":[472,301,635,326],"mouth_laugh":[474,294,630,360],"mouth_speak":[478,302,630,356],"mouth_tired":[492,301,606,470]},"rikki_jack":{"balls_left":[337,1369,658,1600],"balls_right":[516,1346,823,1637],"dick_horny":[276,898,646,1539],"dick_idle":[133,1335,601,1593],"belly_big":[196,791,884,1341],"belly_small":[260,920,820,1288],"body_idle":[0,87,1080,1660],"butt_background":[390,554,695,1261],"butt_cheek_left":[53,473,567,1104],"butt_cheek_right":[514,471,1028,1102],"butt_hole":[510,874,569,961],"foot_idle":[63,516,503,1321],"eyes_horny":[460,280,636,397],"eyes_horny_2":[459,280,638,397],"eyes_idle":[460,280,635,397],"eyes_idle_2":[460,280,635,397],"mouth_horny":[501,428,605,464],"mouth_horny_2":[515,431,585,464],"mouth_idle":[510,434,600,458],"mouth_laugh":[508,433,600,469],"mouth_speak":[508,433,600,458],"mouth_tired":[524,443,580,477],"outfit":[0,73,1049,1917],"outfit_2":[0,73,1049,1917],"outfit_3":[129,365,1020,1655],"outfit_4":[182,365,1020,1229],"outfit_5":[0,241,1080,1660],"outfit_6":[0,241,1080,1660],"outfit_7":[0,158,1080,1686],"outfit_8":[0,262,1080,1582]},"rikki_jack_fat":{"balls_left":[212,1368,601,1686],"balls_right":[440,1344,835,1708],"dick_horny":[53,802,604,1593],"dick_idle":[136,1278,721,1591],"body_idle":[0,84,1080,1660],"butt_background":[390,554,695,1261],"butt_cheek_left":[53,473,567,1104],"butt_cheek_right":[514,471,1028,1102],"butt_hole":[510,874,569,961],"dick_foreskin":[0,0,246,298],"foot_idle":[63,516,503,1321],"eyes_horny":[460,280,636,397],"eyes_horny_2":[459,280,638,397],"eyes_idle":[460,280,635,397],"eyes_idle_2":[460,280,635,397],"mouth_horny":[501,428,605,464],"mouth_horny_2":[515,431,585,464],"mouth_idle":[510,434,600,458],"mouth_laugh":[508,433,600,469],"mouth_speak":[508,433,600,458],"mouth_tired":[524,443,580,477]}};
 
   var BODY_PART_DEFINITIONS = [
     { id: "dick_horny", name: "🍆 Dick (Horny / Erect)", group: "Genitalia", pattern: /dick_horny/i },
@@ -287,7 +291,7 @@
     { id: "mouth_horny", name: "👄 Mouth (Horny)", group: "Face", pattern: /mouth_horny/i },
     { id: "mouth_tired", name: "👄 Mouth (Tired)", group: "Face", pattern: /mouth_tired/i },
 
-    { id: "outfit", name: "👕 Main Outfit", group: "Outfits", pattern: /outfit(?:\.|\_1)/i },
+    { id: "outfit", name: "👕 Main Outfit", group: "Outfits", pattern: /outfit(?:\. |\_1|$)/i },
     { id: "outfit_2", name: "👕 Outfit 2", group: "Outfits", pattern: /outfit_2/i },
     { id: "outfit_3", name: "👕 Outfit 3", group: "Outfits", pattern: /outfit_3/i },
 
@@ -310,17 +314,27 @@
   }
 
   function getAssetOffset(keyOrPath) {
+    var cid = _activeCharacterId || "mead_marvin";
+    var fullKey = cid + ":" + keyOrPath;
+    if (_assetOffsets[fullKey]) return _assetOffsets[fullKey];
     if (_assetOffsets[keyOrPath]) return _assetOffsets[keyOrPath];
     var def = getMatchingDef(keyOrPath);
-    if (def && _assetOffsets[def.id]) return _assetOffsets[def.id];
+    if (def) {
+      var defFullKey = cid + ":" + def.id;
+      if (_assetOffsets[defFullKey]) return _assetOffsets[defFullKey];
+      if (_assetOffsets[def.id]) return _assetOffsets[def.id];
+    }
     return { x: 0, y: 0 };
   }
 
   function setAssetOffset(keyOrPath, off) {
+    var cid = _activeCharacterId || "mead_marvin";
     var def = getMatchingDef(keyOrPath);
     var id = def ? def.id : keyOrPath;
-    _assetOffsets[id] = { x: off.x || 0, y: off.y || 0 };
-    _assetOffsets[keyOrPath] = _assetOffsets[id];
+    var fullKey = cid + ":" + id;
+    _assetOffsets[fullKey] = { x: off.x || 0, y: off.y || 0 };
+    _assetOffsets[id] = _assetOffsets[fullKey];
+    _assetOffsets[keyOrPath] = _assetOffsets[fullKey];
   }
 
   function isAnchorId(id) {
@@ -359,6 +373,41 @@
     return { minX: minX, maxX: maxX, minY: minY, maxY: maxY };
   }
 
+  function detectPartFromCatalog(bbox, charId) {
+    if (!bbox) return null;
+    var candidates = [];
+    if (charId && CHAR_SPRITE_CATALOG[charId]) {
+      candidates.push(CHAR_SPRITE_CATALOG[charId]);
+    }
+    Object.keys(CHAR_SPRITE_CATALOG).forEach(function (cid) {
+      if (cid !== charId) candidates.push(CHAR_SPRITE_CATALOG[cid]);
+    });
+
+    var bestPart = null;
+    var bestDist = 999999;
+
+    for (var i = 0; i < candidates.length; i++) {
+      var dict = candidates[i];
+      var partKeys = Object.keys(dict);
+      for (var j = 0; j < partKeys.length; j++) {
+        var pk = partKeys[j];
+        var ref = dict[pk];
+        var dist = Math.abs(bbox.minX - ref[0]) +
+                   Math.abs(bbox.minY - ref[1]) +
+                   Math.abs(bbox.maxX - ref[2]) +
+                   Math.abs(bbox.maxY - ref[3]);
+        if (dist < bestDist) {
+          bestDist = dist;
+          bestPart = pk;
+        }
+      }
+      if (bestDist < 60) break;
+    }
+
+    if (bestDist < 80) return bestPart;
+    return detectPartFromBBox(bbox);
+  }
+
   function detectPartFromBBox(b) {
     if (!b) return null;
     var w = b.maxX - b.minX;
@@ -366,17 +415,17 @@
     var midY = (b.minY + b.maxY) / 2;
     var midX = (b.minX + b.maxX) / 2;
 
-    if (w > 850 && h > 1100) return "body_idle";
-    if (midY >= 800 && midY <= 1350 && w > 500 && b.minY > 750) return "belly_big";
-    if (b.minY < 850 && b.maxY > 1350 && midX > 200 && midX < 700) return "dick_horny";
-    if (b.minY >= 1150 && b.maxY <= 1650 && midX < 500 && w > 350) return "dick_idle";
-    if (midX < 530 && midY > 1300 && midY < 1700 && w < 450) return "balls_left";
-    if (midX >= 530 && midY > 1300 && midY < 1700 && w < 450) return "balls_right";
-    if (midY < 420 && h < 350) return "eyes_horny";
-    if (midY >= 440 && midY <= 530 && h < 60) return "mouth_idle";
+    if (w > 800 && h > 1000) return "body_idle";
+    if (midY >= 750 && midY <= 1400 && w > 450) return "belly_big";
+    if (midY >= 700 && midY <= 1600 && midX > 150 && midX < 750 && h > 400) return "dick_horny";
+    if (midY >= 1150 && midY <= 1700 && midX < 550 && w > 300) return "dick_idle";
+    if (midX < 530 && midY > 1250 && midY < 1750 && w < 480) return "balls_left";
+    if (midX >= 530 && midY > 1250 && midY < 1750 && w < 480) return "balls_right";
+    if (midY < 450 && h < 350) return "eyes_horny";
+    if (midY >= 400 && midY <= 550 && h < 100) return "mouth_idle";
     if (b.minX < 150 && midY < 1250) return "butt_cheek_left";
     if (b.maxX > 900 && midY < 1250) return "butt_cheek_right";
-    if (midY > 750 && midY < 950 && w < 120) return "butt_hole";
+    if (midY > 750 && midY < 1000 && w < 150) return "butt_hole";
     return null;
   }
 
@@ -410,7 +459,7 @@
           gl.readPixels(0, 0, 1080, 1920, gl.RGBA, gl.UNSIGNED_BYTE, pix);
           var bbox = getAlphaBBoxFromFlipped(pix, 1080, 1920);
           if (bbox) {
-            var part = detectPartFromBBox(bbox);
+            var part = detectPartFromCatalog(bbox, _activeCharacterId);
             if (part) {
               tex._dm_part = part;
               _activeBodyTextures[part] = tex;
@@ -432,7 +481,13 @@
                 var sctx = shiftCanvas.getContext("2d");
                 sctx.drawImage(c, off.x, off.y);
                 gl.bindTexture(gl.TEXTURE_2D, tex);
-                gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, shiftCanvas);
+                try {
+                  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+                  gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+                  gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, gl.RGBA, gl.UNSIGNED_BYTE, shiftCanvas);
+                } catch (eSub) {
+                  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, shiftCanvas);
+                }
               }
             }
           }
@@ -473,7 +528,10 @@
         tex = _activeBodyTextures[def.id];
       }
     }
-    if (!cleanCanvas || !tex) return;
+    if (!cleanCanvas || !tex) {
+      console.warn("[Alignment] Target not found in active textures:", targetKey, Object.keys(_activeBodyTextures));
+      return;
+    }
 
     var c = document.createElement("canvas");
     c.width = 1080;
@@ -484,7 +542,18 @@
 
     var prevTex = gl.getParameter(gl.TEXTURE_BINDING_2D);
     gl.bindTexture(gl.TEXTURE_2D, tex);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, c);
+    try {
+      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+      gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+      gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, gl.RGBA, gl.UNSIGNED_BYTE, c);
+      console.log("[Alignment] Live nudged", targetKey, "by", off, "success!");
+    } catch (e1) {
+      try {
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, c);
+      } catch (e2) {
+        console.error("[Alignment] texSubImage2D & texImage2D failed:", e2);
+      }
+    }
     if (prevTex) gl.bindTexture(gl.TEXTURE_2D, prevTex);
   }
 
@@ -2096,6 +2165,13 @@
 
       "  <div style='background:var(--dm-bg2);border:1px solid var(--dm-border);border-radius:8px;padding:10px;margin-bottom:10px'>" +
       "    <div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:6px'>" +
+      "      <span style='font-size:11px;font-weight:700;color:var(--dm-accent)'>Active Character Model:</span>" +
+      "      <span id='dm-char-detected-tag' style='font-size:10px;color:var(--dm-gold);font-weight:600'>Detecting...</span>" +
+      "    </div>" +
+      "    <select id='dm-align-char-select' style='width:100%;box-sizing:border-box;padding:8px;border-radius:6px;background:var(--dm-bg3);color:var(--dm-text);border:1px solid var(--dm-border);font-size:12px;font-weight:600;margin-bottom:10px'>" +
+      "    </select>" +
+
+      "    <div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:6px'>" +
       "      <span style='font-size:11px;font-weight:700;color:var(--dm-accent)'>Select Body Part / Asset:</span>" +
       "      <span id='dm-align-detected-count' style='font-size:10px;color:var(--dm-green);font-weight:600'>Live</span>" +
       "    </div>" +
@@ -2404,6 +2480,8 @@
     }
 
     /* ── Section 6: Body & Asset Alignment Tool Wiring ── */
+    var alignCharSelect = panel.querySelector("#dm-align-char-select");
+    var charDetectedTag = panel.querySelector("#dm-char-detected-tag");
     var alignSelect = panel.querySelector("#dm-align-select");
     var alignCoords = panel.querySelector("#dm-align-coords");
     var stepBtns    = panel.querySelectorAll(".dm-step-btn");
@@ -2415,6 +2493,48 @@
     var alignSave   = panel.querySelector("#dm-align-save");
     var alignResetAll = panel.querySelector("#dm-align-reset-all");
     var detectedCount = panel.querySelector("#dm-align-detected-count");
+
+    // Populate Character Model dropdown
+    if (alignCharSelect) {
+      var charOptionsHtml = "";
+      OFFICIAL_CHARACTERS.forEach(function (oc) {
+        charOptionsHtml += "<option value='" + oc.id + "'" + (oc.id === _activeCharacterId ? " selected" : "") + ">" + oc.name + "</option>";
+      });
+      alignCharSelect.innerHTML = charOptionsHtml;
+
+      alignCharSelect.onchange = function () {
+        _activeCharacterId = alignCharSelect.value;
+        // Reset inspected flag on textures so they re-match to the newly selected character model
+        _allActiveTextures.forEach(function (t) { if (t) t._dm_inspected = false; });
+        _activeBodyTextures = {};
+        _cleanAssetCanvases = {};
+        if (window._digibara_gl) {
+          ensureTexturesInspected(window._digibara_gl);
+        }
+        populateAlignDropdown();
+        updateCoordsDisplay();
+      };
+    }
+
+    function autoDetectCharacter() {
+      readFromSavedata("savegame.save").then(function (bytes) {
+        try {
+          var o = decodeSave(bytes);
+          var cid = o && (o.last_used_character || o.current_character);
+          if (cid && CHAR_SPRITE_CATALOG[cid]) {
+            _activeCharacterId = cid;
+            if (alignCharSelect) alignCharSelect.value = cid;
+            if (charDetectedTag) {
+              charDetectedTag.textContent = "✓ In-Game (" + cid + ")";
+              charDetectedTag.style.color = "var(--dm-green)";
+            }
+            if (window._digibara_update_align_ui) window._digibara_update_align_ui();
+          }
+        } catch (e) {}
+      }).catch(function () {});
+    }
+    setTimeout(autoDetectCharacter, 1500);
+    setInterval(autoDetectCharacter, 5000);
 
     function updateCoordsDisplay() {
       if (!alignSelect || !alignCoords) return;
@@ -2444,27 +2564,36 @@
         "✨ Detected / Custom Sprites": []
       };
 
+      // Add character specific parts if known
+      var charParts = CHAR_SPRITE_CATALOG[_activeCharacterId] || {};
+      Object.keys(charParts).forEach(function (pName) {
+        var def = getMatchingDef(pName);
+        if (def) {
+          var g = def.group || "Other";
+          if (!groups[g].some(function (it) { return it.id === def.id; })) {
+            groups[g].push(def);
+          }
+        } else {
+          if (!groups["✨ Detected / Custom Sprites"].some(function (it) { return it.id === pName; })) {
+            groups["✨ Detected / Custom Sprites"].push({ id: pName, name: pName });
+          }
+        }
+      });
+
       BODY_PART_DEFINITIONS.forEach(function (def) {
         var g = def.group || "Other";
         if (!groups[g]) groups[g] = [];
-        groups[g].push(def);
+        if (!groups[g].some(function (it) { return it.id === def.id; })) {
+          groups[g].push(def);
+        }
       });
 
       Object.keys(_cleanAssetCanvases).forEach(function (fn) {
-        if (!getMatchingDef(fn)) {
+        if (!getMatchingDef(fn) && !charParts[fn]) {
           var name = fn.split("/").pop();
-          groups["✨ Detected / Custom Sprites"].push({ id: fn, name: name });
-        }
-      });
-      Object.keys(_loadedAssetImages).forEach(function (fn) {
-        if (!getMatchingDef(fn) && !_cleanAssetCanvases[fn]) {
-          var name = fn.split("/").pop();
-          groups["✨ Detected / Custom Sprites"].push({ id: fn, name: name });
-        }
-      });
-      Object.keys(_registeredSpriteKeys).forEach(function (k) {
-        if (!getMatchingDef(k) && !_cleanAssetCanvases[k]) {
-          groups["✨ Detected / Custom Sprites"].push({ id: k, name: k });
+          if (!groups["✨ Detected / Custom Sprites"].some(function (it) { return it.id === fn; })) {
+            groups["✨ Detected / Custom Sprites"].push({ id: fn, name: name });
+          }
         }
       });
 
