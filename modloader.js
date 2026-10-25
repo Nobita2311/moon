@@ -591,11 +591,12 @@
       return res;
     };
 
-    setInterval(function () {
+    // Inspect textures on-demand only (eliminates synchronous readPixels GPU pipeline lag)
+    window._digibara_inspect_textures = function () {
       if (window._digibara_gl) {
         ensureTexturesInspected(window._digibara_gl);
       }
-    }, 800);
+    };
   }
 
   // Intercept FS_createDataFile in Module (Asset Cache & Offset Hook)
@@ -1268,6 +1269,7 @@
     c.is_premium = true;
     c.is_premium_plus = true;
     c.premium_character = true;
+    c.parked = false; // Keeps character active in Room Manager (bypasses 20-char park limit)
     c.unlocked_modules = [true, true, true, true, true, true, true, true, true, true,
                           true, true, true, true, true, true, true, true, true, true];
     var outfits = [];
@@ -2147,6 +2149,22 @@
       "      <span class='dm-slider'></span>" +
       "    </label>" +
       "  </div>" +
+
+      "  <div style='background:var(--dm-bg2);border:1px solid var(--dm-border);border-radius:6px;padding:8px 10px;margin-top:8px'>" +
+      "    <div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:4px'>" +
+      "      <span style='font-size:11px;font-weight:700;color:var(--dm-text)'>Custom Character Limit:</span>" +
+      "      <span id='dm-limit-tag' style='font-size:10px;color:var(--dm-gold);font-weight:700'>32,767 (Unlimited)</span>" +
+      "    </div>" +
+      "    <select id='dm-custom-import-limit' style='width:100%;padding:6px;border-radius:4px;background:var(--dm-bg3);color:var(--dm-text);border:1px solid var(--dm-border);font-size:11px;font-weight:600'>" +
+      "      <option value='32767' selected>32,767 (Unlimited / No Lock)</option>" +
+      "      <option value='500'>500 Characters</option>" +
+      "      <option value='200'>200 Characters</option>" +
+      "      <option value='100'>100 Characters</option>" +
+      "      <option value='50'>50 Characters</option>" +
+      "      <option value='20'>20 (Vanilla Default)</option>" +
+      "    </select>" +
+      "    <small style='font-size:10px;color:var(--dm-muted);display:block;margin-top:4px'>Bypasses the 20-character cap in Room Manager and keeps all imported characters active.</small>" +
+      "  </div>" +
       "</div>" +
 
       /* Section 4: Live Cheats */
@@ -2388,6 +2406,35 @@
 
     wireToggle("dm-patreon",   "unlock_patreon");
     wireToggle("dm-charlimit", "remove_char_limit");
+
+    var limitSelect = panel.querySelector("#dm-custom-import-limit");
+    var limitTag    = panel.querySelector("#dm-limit-tag");
+    var savedLimit = localStorage.getItem("dm_custom_char_limit") || "32767";
+    if (limitSelect) {
+      limitSelect.value = savedLimit;
+      if (limitTag) limitTag.textContent = savedLimit === "32767" ? "32,767 (Unlimited)" : savedLimit + " Max";
+
+      limitSelect.onchange = function () {
+        var lim = limitSelect.value;
+        localStorage.setItem("dm_custom_char_limit", lim);
+        if (limitTag) limitTag.textContent = lim === "32767" ? "32,767 (Unlimited)" : lim + " Max";
+
+        // Unpark characters in live save if unlimited
+        readFromSavedata("savegame.save").then(function (bytes) {
+          try {
+            var o = decodeSave(bytes);
+            if (o && o.characters_data) {
+              Object.keys(o.characters_data).forEach(function (cid) {
+                var c = o.characters_data[cid];
+                c.unlocked = true;
+                c.parked = false;
+              });
+              writeToSavedata("savegame.save", encodeSave(o));
+            }
+          } catch (e) {}
+        }).catch(function () {});
+      };
+    }
     wireToggle("dm-infmoney",  "inf_money");
     wireToggle("dm-inftank",   "inf_tank");
     wireToggle("dm-nooffline", "no_offline_penalty");
