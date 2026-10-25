@@ -839,6 +839,177 @@
     return s.indexOf(PATREON_HOST) >= 0 || s.indexOf("mode=validate") >= 0;
   }
 
+  /* ═══════════════════════════════════════════════════════════════
+     §3B  CODE REDEMPTION INTERCEPTOR & CUSTOM CODE ENGINE
+     ═══════════════════════════════════════════════════════════════ */
+  var REDEEM_STORAGE_KEY = "dm_custom_redeem_codes";
+  var DEFAULT_REDEEM_CODES = [
+    { code: "FREECASH", rewardType: "coins", amount: 1000000, maxUses: 999, usesLeft: 999, desc: "$1,000,000 Cash" },
+    { code: "MEGAMILK", rewardType: "full_tank", amount: 0, maxUses: 999, usesLeft: 999, desc: "Fill Milk/Cum Tank 100%" },
+    { code: "MAXSTATS", rewardType: "max_stats", amount: 0, maxUses: 999, usesLeft: 999, desc: "Max All Character Stats (100% Stamina)" },
+    { code: "TICKETS100", rewardType: "tickets", amount: 100, maxUses: 999, usesLeft: 999, desc: "100 Gacha Tickets" },
+    { code: "VIPMASTER", rewardType: "all", amount: 50000000, maxUses: 999, usesLeft: 999, desc: "$50M Cash, 999 Tickets, Max Stats & Full Tank" }
+  ];
+
+  function getCustomRedeemCodes() {
+    try {
+      var raw = localStorage.getItem(REDEEM_STORAGE_KEY);
+      if (raw) return JSON.parse(raw);
+    } catch (e) {}
+    return DEFAULT_REDEEM_CODES.slice();
+  }
+
+  function saveCustomRedeemCodes(arr) {
+    try {
+      localStorage.setItem(REDEEM_STORAGE_KEY, JSON.stringify(arr));
+    } catch (e) {}
+  }
+
+  function isCodeRedeemReq(url) {
+    if (!url) return false;
+    var s = String(url);
+    return s.indexOf("digibara-codes.digibara.workers.dev") >= 0 || (s.indexOf("workers.dev") >= 0 && s.indexOf("code=") >= 0);
+  }
+
+  function extractCodeParam(url) {
+    try {
+      var m = /[?&]code=([^&#]+)/i.exec(url);
+      if (m) return decodeURIComponent(m[1]).trim().toUpperCase();
+    } catch (e) {}
+    return "";
+  }
+
+  function showToast(msg, isErr) {
+    var t = document.getElementById("dm-toast");
+    if (!t) {
+      t = document.createElement("div");
+      t.id = "dm-toast";
+      document.body.appendChild(t);
+    }
+    t.textContent = msg;
+    t.style.display = "block";
+    t.style.background = isErr ? "#5a1f2e" : "linear-gradient(135deg, #12362a, #1f6b52)";
+    t.style.borderColor = isErr ? "#f87171" : "#6ee7b7";
+    t.style.color = isErr ? "#fca5a5" : "#a7f3d0";
+    clearTimeout(t._timer);
+    t._timer = setTimeout(function () {
+      t.style.display = "none";
+    }, 3200);
+  }
+
+  function applyCodeRewardToSave(rewardItem) {
+    return readFromSavedata("savegame.save").then(function (bytes) {
+      try {
+        var data = decodeSave(bytes);
+        if (!data) return false;
+        var modified = false;
+
+        if (rewardItem.rewardType === "coins" || rewardItem.rewardType === "all") {
+          data.money = (data.money || 0) + (rewardItem.amount || 1000000);
+          modified = true;
+        }
+        if (rewardItem.rewardType === "tickets" || rewardItem.rewardType === "all") {
+          data.tickets = (data.tickets || 0) + (rewardItem.amount || 100);
+          data.gacha_tickets = data.tickets;
+          modified = true;
+        }
+        if (rewardItem.rewardType === "max_stats" || rewardItem.rewardType === "all") {
+          if (data.characters_data) {
+            Object.keys(data.characters_data).forEach(function (cid) {
+              var c = data.characters_data[cid];
+              c.stamina = 100;
+              c.energy = 100;
+              c.satiety = 100;
+              c.hygiene = 100;
+              c.horny = 100;
+              c.strength = 100;
+              c.lactation = 100;
+            });
+            modified = true;
+          }
+        }
+        if (rewardItem.rewardType === "full_tank" || rewardItem.rewardType === "all") {
+          if (data.characters_data) {
+            Object.keys(data.characters_data).forEach(function (cid) {
+              var c = data.characters_data[cid];
+              c.current_milk_produced = c.tank_size || 50;
+            });
+            modified = true;
+          }
+        }
+        if (rewardItem.rewardType === "outfits" || rewardItem.rewardType === "all") {
+          if (data.characters_data) {
+            var fullOutfits = [];
+            for (var oi = 0; oi < 200; oi++) fullOutfits.push(oi);
+            var fullMods = [];
+            for (var mi = 0; mi < 20; mi++) fullMods.push(true);
+            Object.keys(data.characters_data).forEach(function (cid) {
+              var c = data.characters_data[cid];
+              c.unlocked = true;
+              c.unlocked_clothes_index = fullOutfits.slice();
+              c.unlocked_modules = fullMods.slice();
+            });
+            modified = true;
+          }
+        }
+
+        if (modified) {
+          writeToSavedata("savegame.save", encodeSave(data));
+        }
+        return modified;
+      } catch (e) {
+        return false;
+      }
+    }).catch(function () { return false; });
+  }
+
+  function processRedeemCode(codeStr) {
+    var code = (codeStr || "").trim().toUpperCase();
+    var codes = getCustomRedeemCodes();
+    var item = null;
+    for (var i = 0; i < codes.length; i++) {
+      if (codes[i].code.toUpperCase() === code) {
+        item = codes[i];
+        break;
+      }
+    }
+
+    if (!item) {
+      // Fallback for unknown code: give 50,000 coins!
+      var fallbackCoins = 50000;
+      applyCodeRewardToSave({ rewardType: "coins", amount: fallbackCoins });
+      return {
+        success: true,
+        coins: fallbackCoins,
+        desc: "Bonus Reward: 50,000 Coins",
+        text: JSON.stringify({ valid: true, coins: fallbackCoins, end_date: "2030-01-01" })
+      };
+    }
+
+    if (item.usesLeft <= 0 && item.maxUses !== 999) {
+      return {
+        success: false,
+        coins: 0,
+        desc: "Code expired or maximum uses reached!",
+        text: JSON.stringify({ valid: false, error: "Code reached maximum uses!" })
+      };
+    }
+
+    if (item.maxUses !== 999 && item.usesLeft > 0) {
+      item.usesLeft--;
+      saveCustomRedeemCodes(codes);
+    }
+
+    var rewardCoins = (item.rewardType === "coins" || item.rewardType === "all") ? (item.amount || 1000000) : 50000;
+    applyCodeRewardToSave(item);
+    return {
+      success: true,
+      coins: rewardCoins,
+      desc: item.desc,
+      text: JSON.stringify({ valid: true, coins: rewardCoins, end_date: "2030-01-01" })
+    };
+  }
+
   /* A. Intercept window.fetch() */
   var _origFetch = (typeof window.fetch === "function") ? window.fetch.bind(window) : null;
   window.fetch = function (input, init) {
@@ -846,6 +1017,15 @@
     if (isPatreonReq(url)) {
       var fakeStr = fakePatreonJSON();
       return Promise.resolve(new Response(fakeStr, {
+        status: 200,
+        statusText: "OK",
+        headers: { "Content-Type": "application/json" }
+      }));
+    }
+    if (isCodeRedeemReq(url)) {
+      var code = extractCodeParam(url);
+      var res = processRedeemCode(code);
+      return Promise.resolve(new Response(res.text, {
         status: 200,
         statusText: "OK",
         headers: { "Content-Type": "application/json" }
@@ -859,9 +1039,13 @@
   var _origSend = XMLHttpRequest.prototype.send;
   XMLHttpRequest.prototype.open = function (method, url) {
     this._isPatreon = isPatreonReq(url);
+    this._isCodeRedeem = isCodeRedeemReq(url);
     if (this._isPatreon) {
       this._patreonMethod = method;
       this._patreonUrl = url;
+    }
+    if (this._isCodeRedeem) {
+      this._codeUrl = url;
     }
     return _origOpen.apply(this, arguments);
   };
@@ -869,6 +1053,33 @@
     if (this._isPatreon) {
       var self = this;
       var text = fakePatreonJSON();
+      var buf = strToBuffer(text);
+      setTimeout(function () {
+        try {
+          Object.defineProperty(self, "readyState", { value: 4, configurable: true });
+          Object.defineProperty(self, "status", { value: 200, configurable: true });
+          Object.defineProperty(self, "statusText", { value: "OK", configurable: true });
+          Object.defineProperty(self, "responseText", { value: text, configurable: true });
+          Object.defineProperty(self, "response", {
+            get: function () {
+              return self.responseType === "arraybuffer" ? buf : text;
+            },
+            configurable: true
+          });
+          if (typeof self.onreadystatechange === "function") self.onreadystatechange();
+          if (typeof self.onload === "function") self.onload();
+          self.dispatchEvent(new Event("readystatechange"));
+          self.dispatchEvent(new Event("load"));
+          self.dispatchEvent(new Event("loadend"));
+        } catch (err) {}
+      }, 0);
+      return;
+    }
+    if (this._isCodeRedeem) {
+      var self = this;
+      var code = extractCodeParam(this._codeUrl);
+      var res = processRedeemCode(code);
+      var text = res.text;
       var buf = strToBuffer(text);
       setTimeout(function () {
         try {
@@ -2043,6 +2254,24 @@
       ".dm-step-btn{padding:4px 9px;font-size:11px;font-weight:700;border-radius:6px;border:1px solid var(--dm-border);background:var(--dm-bg2);color:var(--dm-muted);cursor:pointer;transition:all .15s}",
       ".dm-step-btn:hover{color:var(--dm-text);background:var(--dm-bg3)}",
       ".dm-step-btn.active{background:var(--dm-accent);color:#fff;border-color:var(--dm-accent)}",
+
+      /* Toast Notification */
+      "#dm-toast{position:fixed;top:20px;left:50%;transform:translateX(-50%);z-index:999999;padding:10px 18px;border-radius:8px;font:700 13px 'Segoe UI',Arial;display:none;box-shadow:0 8px 30px rgba(0,0,0,0.85);border:1px solid;pointer-events:none;transition:all .2s;text-align:center;max-width:90vw}",
+
+      /* Character Manager & Room Slots */
+      ".dm-cm-card{background:var(--dm-bg2);border:1px solid var(--dm-border);border-radius:8px;padding:10px;margin-bottom:8px;transition:border-color .15s}",
+      ".dm-cm-card:hover{border-color:var(--dm-accent)}",
+      ".dm-cm-status-active{display:inline-block;padding:2px 7px;border-radius:4px;font-size:10px;font-weight:700;background:#12362a;color:var(--dm-green);border:1px solid rgba(110,231,183,.3)}",
+      ".dm-cm-status-parked{display:inline-block;padding:2px 7px;border-radius:4px;font-size:10px;font-weight:700;background:#3a2010;color:var(--dm-gold);border:1px solid rgba(255,217,138,.3)}",
+      ".dm-cm-btn{padding:5px 9px;border:none;border-radius:6px;cursor:pointer;font:600 11px 'Segoe UI',Arial;transition:opacity .15s}",
+      ".dm-cm-btn:hover{opacity:.85}",
+      ".dm-cm-btn-active{background:#2a1f40;color:#d8b4fe;border:1px solid rgba(168,85,247,.4)}",
+      ".dm-cm-btn-park{background:#3a1520;color:#fca5a5;border:1px solid rgba(248,113,113,.4)}",
+
+      /* Code Redeem & ETC */
+      ".dm-cr-card{background:var(--dm-bg2);border:1px solid var(--dm-border);border-radius:8px;padding:10px;margin-bottom:8px}",
+      ".dm-tank-bar{height:12px;background:var(--dm-bg3);border-radius:6px;overflow:hidden;margin:6px 0;border:1px solid var(--dm-border)}",
+      ".dm-tank-fill{height:100%;background:linear-gradient(90deg,var(--dm-accent2),var(--dm-gold));transition:width .3s}",
     ].join("\n");
     document.head.appendChild(s);
   }
@@ -2351,6 +2580,126 @@
       "    </div>" +
       "  </div>" +
       "  <div id='dm-stealer-msg' style='font-size:11px;font-weight:600;min-height:16px;margin-top:4px'></div>" +
+      "</div>" +
+
+      /* Section 8: Character Manager & Room Slots */
+      "<div class='dm-section'>" +
+      "  <div class='dm-sec-title'>👥 Character Manager &amp; Rooms</div>" +
+      "  <p style='font-size:11px;color:var(--dm-muted);margin:0 0 10px;line-height:1.4'>" +
+      "    Bypass the 20-character room limit. Toggle characters active or parked, lock stats to 100%, and unlock outfits." +
+      "  </p>" +
+
+      "  <div style='background:var(--dm-bg2);border:1px solid var(--dm-border);border-radius:8px;padding:10px;margin-bottom:10px'>" +
+      "    <div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:8px'>" +
+      "      <span id='dm-cm-summary' style='font-size:11px;font-weight:700;color:var(--dm-text)'>Loading roster...</span>" +
+      "      <button type='button' id='dm-cm-refresh-btn' class='dm-btn-se-sm' style='padding:3px 8px;font-size:10px'>🔄 Refresh</button>" +
+      "    </div>" +
+
+      "    <div style='display:flex;gap:6px;margin-bottom:8px'>" +
+      "      <button type='button' id='dm-cm-max-all-btn' class='dm-btn dm-btn-primary' style='flex:1;font-size:11px;padding:7px'>⚡ Max All Stats</button>" +
+      "      <button type='button' id='dm-cm-unpark-all-btn' class='dm-btn dm-btn-secondary' style='flex:1;font-size:11px;padding:7px'>🔓 Enable All</button>" +
+      "    </div>" +
+
+      "    <div style='display:flex;gap:6px;margin-bottom:10px'>" +
+      "      <input type='text' id='dm-cm-search' placeholder='Search character...' style='flex:1;box-sizing:border-box;padding:6px 8px;border-radius:6px;background:var(--dm-bg3);color:var(--dm-text);border:1px solid var(--dm-border);font-size:11px'>" +
+      "      <select id='dm-cm-filter' style='padding:6px;border-radius:6px;background:var(--dm-bg3);color:var(--dm-text);border:1px solid var(--dm-border);font-size:11px'>" +
+      "        <option value='all'>All</option>" +
+      "        <option value='active'>Active</option>" +
+      "        <option value='parked'>Parked</option>" +
+      "        <option value='custom'>Custom</option>" +
+      "        <option value='official'>Official</option>" +
+      "      </select>" +
+      "    </div>" +
+
+      "    <div id='dm-cm-list' style='max-height:280px;overflow-y:auto;padding-right:2px'>" +
+      "      <div style='color:var(--dm-muted);font-size:11px;text-align:center;padding:12px'>Loading characters...</div>" +
+      "    </div>" +
+      "  </div>" +
+      "</div>" +
+
+      /* Section 9: Code Redeem Generator & Manager */
+      "<div class='dm-section'>" +
+      "  <div class='dm-sec-title'>🎟️ Code Redeem Mode</div>" +
+      "  <p style='font-size:11px;color:var(--dm-muted);margin:0 0 10px;line-height:1.4'>" +
+      "    Create custom redeem codes or quick-claim rewards. Codes work in the in-game REDEEM CODE screen or via 1-click." +
+      "  </p>" +
+
+      "  <div style='background:var(--dm-bg2);border:1px solid var(--dm-border);border-radius:8px;padding:10px;margin-bottom:10px'>" +
+      "    <div style='font-size:11px;font-weight:700;color:var(--dm-gold);margin-bottom:6px'>Generate New Redeem Code:</div>" +
+      "    <div style='display:flex;gap:6px;margin-bottom:6px'>" +
+      "      <input type='text' id='dm-cr-code-input' placeholder='CODE (e.g. MEGAPACK)' style='flex:1;box-sizing:border-box;padding:7px 8px;border-radius:6px;background:var(--dm-bg3);color:var(--dm-text);border:1px solid var(--dm-border);font-size:11px;font-family:monospace;font-weight:700'>" +
+      "      <select id='dm-cr-uses-select' style='padding:7px;border-radius:6px;background:var(--dm-bg3);color:var(--dm-text);border:1px solid var(--dm-border);font-size:11px'>" +
+      "        <option value='999'>Unlimited Uses</option>" +
+      "        <option value='1'>1 Use</option>" +
+      "        <option value='3'>3 Uses</option>" +
+      "        <option value='10'>10 Uses</option>" +
+      "      </select>" +
+      "    </div>" +
+
+      "    <div style='display:flex;gap:6px;margin-bottom:8px'>" +
+      "      <select id='dm-cr-reward-select' style='flex:1;padding:7px;border-radius:6px;background:var(--dm-bg3);color:var(--dm-text);border:1px solid var(--dm-border);font-size:11px'>" +
+      "        <option value='coins'>💰 Money / Coins</option>" +
+      "        <option value='tickets'>🎟️ Gacha Tickets</option>" +
+      "        <option value='max_stats'>⚡ Max Character Stats (Stamina 100%)</option>" +
+      "        <option value='full_tank'>🥛 Fill Milk / Cum Tank 100%</option>" +
+      "        <option value='outfits'>👗 Unlock Outfits &amp; Modules</option>" +
+      "        <option value='all'>👑 VIP Master (All Rewards)</option>" +
+      "      </select>" +
+      "      <input type='number' id='dm-cr-amount-input' value='1000000' placeholder='Amount' style='width:90px;box-sizing:border-box;padding:7px 8px;border-radius:6px;background:var(--dm-bg3);color:var(--dm-text);border:1px solid var(--dm-border);font-size:11px'>" +
+      "    </div>" +
+
+      "    <button type='button' id='dm-cr-add-btn' class='dm-btn dm-btn-primary' style='width:100%;padding:8px;font-size:11px;font-weight:700;margin-bottom:10px'>➕ Create Custom Code</button>" +
+
+      "    <div style='font-size:11px;font-weight:700;color:var(--dm-accent);margin-bottom:6px'>Active Redeem Codes:</div>" +
+      "    <div id='dm-cr-list' style='max-height:220px;overflow-y:auto'>" +
+      "    </div>" +
+      "  </div>" +
+      "</div>" +
+
+      /* Section 10: ETC & Milk/Cum Tank Controls */
+      "<div class='dm-section'>" +
+      "  <div class='dm-sec-title'>🍼 ETC &amp; Milk/Cum Tank Controls</div>" +
+      "  <p style='font-size:11px;color:var(--dm-muted);margin:0 0 10px;line-height:1.4'>" +
+      "    Directly control facility milk/cum storage, fill or empty tanks, sell stock, and grant facility bonuses." +
+      "  </p>" +
+
+      "  <div style='background:var(--dm-bg2);border:1px solid var(--dm-border);border-radius:8px;padding:10px;margin-bottom:10px'>" +
+      "    <div style='display:flex;justify-content:space-between;align-items:center;font-size:11px'>" +
+      "      <span style='font-weight:700;color:var(--dm-text)'>Facility Milk Storage:</span>" +
+      "      <span id='dm-etc-tank-info' style='color:var(--dm-gold);font-weight:700'>...</span>" +
+      "    </div>" +
+      "    <div class='dm-tank-bar'>" +
+      "      <div id='dm-etc-tank-fill' class='dm-tank-fill' style='width:0%'></div>" +
+      "    </div>" +
+
+      "    <div style='display:flex;gap:6px;margin:8px 0'>" +
+      "      <button type='button' id='dm-etc-fill-btn' class='dm-btn dm-btn-primary' style='flex:1;font-size:11px;padding:8px'>🥛 Fill Tank 100%</button>" +
+      "      <button type='button' id='dm-etc-empty-btn' class='dm-btn dm-btn-danger' style='flex:1;font-size:11px;padding:8px'>🫗 Empty Tank (0L)</button>" +
+      "    </div>" +
+
+      "    <button type='button' id='dm-etc-sell-btn' class='dm-btn dm-btn-secondary' style='width:100%;font-size:11px;padding:8px;margin-bottom:10px'>💰 Instant Sell Stored Milk</button>" +
+
+      "    <div style='font-size:11px;font-weight:700;color:var(--dm-accent);margin-bottom:6px'>Custom Tank Capacity per Character:</div>" +
+      "    <div style='display:flex;gap:6px;margin-bottom:10px'>" +
+      "      <select id='dm-etc-tank-capacity-select' style='flex:1;padding:7px;border-radius:6px;background:var(--dm-bg3);color:var(--dm-text);border:1px solid var(--dm-border);font-size:11px'>" +
+      "        <option value='50'>50 L (Vanilla Default)</option>" +
+      "        <option value='100'>100 L</option>" +
+      "        <option value='500'>500 L</option>" +
+      "        <option value='1000' selected>1,000 L</option>" +
+      "        <option value='10000'>10,000 L (Mega Tank)</option>" +
+      "        <option value='100000'>100,000 L (Colossal)</option>" +
+      "      </select>" +
+      "      <button type='button' id='dm-etc-set-tank-btn' class='dm-btn dm-btn-primary' style='font-size:11px;padding:7px 12px'>Set Size</button>" +
+      "    </div>" +
+
+      "    <div style='font-size:11px;font-weight:700;color:var(--dm-accent);margin-bottom:6px'>Quick Facility Boosts:</div>" +
+      "    <div style='display:grid;grid-template-columns:1fr 1fr;gap:6px'>" +
+      "      <button type='button' id='dm-etc-tickets-btn' class='dm-btn dm-btn-secondary' style='font-size:10px;padding:7px'>🎟️ +999 Tickets</button>" +
+      "      <button type='button' id='dm-etc-hygiene-btn' class='dm-btn dm-btn-secondary' style='font-size:10px;padding:7px'>🧼 Max Hygiene</button>" +
+      "      <button type='button' id='dm-etc-satiety-btn' class='dm-btn dm-btn-secondary' style='font-size:10px;padding:7px'>🍔 Max Satiety</button>" +
+      "      <button type='button' id='dm-etc-horny-btn' class='dm-btn dm-btn-secondary' style='font-size:10px;padding:7px'>❤️ Max Horny</button>" +
+      "    </div>" +
+      "  </div>" +
       "</div>";
 
 
@@ -3087,6 +3436,650 @@
         exportNext();
       };
     }
+
+    /* ═══════════════════════════════════════════════════════════════
+       §8  CHARACTER MANAGER WIRING
+       ═══════════════════════════════════════════════════════════════ */
+    var cmListEl        = panel.querySelector("#dm-cm-list");
+    var cmSummaryEl     = panel.querySelector("#dm-cm-summary");
+    var cmSearchEl      = panel.querySelector("#dm-cm-search");
+    var cmFilterEl      = panel.querySelector("#dm-cm-filter");
+    var cmRefreshBtn    = panel.querySelector("#dm-cm-refresh-btn");
+    var cmMaxAllBtn     = panel.querySelector("#dm-cm-max-all-btn");
+    var cmUnparkAllBtn  = panel.querySelector("#dm-cm-unpark-all-btn");
+
+    function loadAndRenderCharacters() {
+      if (!cmListEl) return;
+      readFromSavedata("savegame.save").then(function (bytes) {
+        var o = decodeSave(bytes);
+        if (!o || !o.characters_data) {
+          cmListEl.innerHTML = "<div style='color:var(--dm-muted);font-size:11px;text-align:center;padding:12px'>No save data found.</div>";
+          return;
+        }
+
+        var chars = o.characters_data;
+        var cids = Object.keys(chars);
+        var activeCount = 0;
+        var parkedCount = 0;
+
+        cids.forEach(function (cid) {
+          if (chars[cid].parked) parkedCount++;
+          else activeCount++;
+        });
+
+        if (cmSummaryEl) {
+          cmSummaryEl.textContent = "Active: " + activeCount + " | Parked: " + parkedCount + " | Total: " + cids.length;
+        }
+
+        var filter = cmFilterEl ? cmFilterEl.value : "all";
+        var query = cmSearchEl ? cmSearchEl.value.trim().toLowerCase() : "";
+
+        var html = "";
+        cids.forEach(function (cid) {
+          var c = chars[cid];
+          var isOfficial = OFFICIAL_CHARACTERS.some(function (oc) { return oc.id === cid; });
+          var isParked = !!c.parked;
+
+          if (filter === "active" && isParked) return;
+          if (filter === "parked" && !isParked) return;
+          if (filter === "custom" && isOfficial) return;
+          if (filter === "official" && !isOfficial) return;
+
+          var name = c.name || cid;
+          if (query && name.toLowerCase().indexOf(query) < 0 && cid.toLowerCase().indexOf(query) < 0) return;
+
+          var statusBadge = isParked
+            ? "<span class='dm-cm-status-parked'>Parked (Disabled)</span>"
+            : "<span class='dm-cm-status-active'>Active Room</span>";
+
+          var typeBadge = isOfficial
+            ? "<span style='font-size:9px;color:var(--dm-gold);font-weight:700'>[Official]</span>"
+            : "<span style='font-size:9px;color:var(--dm-green);font-weight:700'>[Custom]</span>";
+
+          var stamina = c.stamina || 0;
+          var energy = c.energy || 0;
+          var curMilk = (c.current_milk_produced || 0).toFixed(1);
+          var maxMilk = (c.tank_size || 50).toFixed(0);
+
+          html += "<div class='dm-cm-card' data-cid='" + cid + "'>" +
+            "  <div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:4px'>" +
+            "    <div>" +
+            "      <strong style='font-size:12px;color:var(--dm-text)'>" + name + "</strong> " + typeBadge +
+            "    </div>" +
+            "    " + statusBadge +
+            "  </div>" +
+            "  <div style='display:flex;justify-content:space-between;align-items:center;font-size:10px;color:var(--dm-muted);margin-bottom:6px'>" +
+            "    <span>⚡ Stamina: <strong style='color:var(--dm-green)'>" + stamina + "%</strong> | Energy: " + energy + "%</span>" +
+            "    <span>🥛 " + curMilk + " / " + maxMilk + " L</span>" +
+            "  </div>" +
+            "  <div style='display:flex;gap:4px'>" +
+            (isParked
+              ? "    <button type='button' class='dm-cm-btn dm-cm-btn-active cm-toggle-btn' data-cid='" + cid + "'>🔓 Activate</button>"
+              : "    <button type='button' class='dm-cm-btn dm-cm-btn-park cm-toggle-btn' data-cid='" + cid + "'>💤 Park</button>") +
+            "    <button type='button' class='dm-cm-btn dm-btn-secondary cm-max-btn' data-cid='" + cid + "'>⚡ Max Stats</button>" +
+            "    <button type='button' class='dm-cm-btn dm-btn-secondary cm-outfit-btn' data-cid='" + cid + "'>👗 Outfits</button>" +
+            "    <button type='button' class='dm-cm-btn dm-btn-secondary cm-milk-btn' data-cid='" + cid + "'>🍼 Milk</button>" +
+            "  </div>" +
+            "</div>";
+        });
+
+        if (!html) {
+          html = "<div style='color:var(--dm-muted);font-size:11px;text-align:center;padding:12px'>No characters matched filter.</div>";
+        }
+
+        cmListEl.innerHTML = html;
+
+        // Wire per-character buttons
+        cmListEl.querySelectorAll(".cm-toggle-btn").forEach(function (btn) {
+          btn.onclick = function () {
+            var cid = this.getAttribute("data-cid");
+            readFromSavedata("savegame.save").then(function (b2) {
+              var s2 = decodeSave(b2);
+              if (s2 && s2.characters_data && s2.characters_data[cid]) {
+                var wasParked = !!s2.characters_data[cid].parked;
+                s2.characters_data[cid].parked = !wasParked;
+                if (wasParked) s2.characters_data[cid].unlocked = true;
+                writeToSavedata("savegame.save", encodeSave(s2));
+                showToast(cid + " is now " + (wasParked ? "ACTIVE in Room!" : "PARKED!"));
+                loadAndRenderCharacters();
+              }
+            });
+          };
+        });
+
+        cmListEl.querySelectorAll(".cm-max-btn").forEach(function (btn) {
+          btn.onclick = function () {
+            var cid = this.getAttribute("data-cid");
+            readFromSavedata("savegame.save").then(function (b2) {
+              var s2 = decodeSave(b2);
+              if (s2 && s2.characters_data && s2.characters_data[cid]) {
+                var ch = s2.characters_data[cid];
+                ch.stamina = 100;
+                ch.energy = 100;
+                ch.satiety = 100;
+                ch.hygiene = 100;
+                ch.horny = 100;
+                ch.strength = 100;
+                ch.lactation = 100;
+                writeToSavedata("savegame.save", encodeSave(s2));
+                showToast("✓ Maxed all stats (100% Stamina) for " + cid + "!");
+                loadAndRenderCharacters();
+              }
+            });
+          };
+        });
+
+        cmListEl.querySelectorAll(".cm-outfit-btn").forEach(function (btn) {
+          btn.onclick = function () {
+            var cid = this.getAttribute("data-cid");
+            readFromSavedata("savegame.save").then(function (b2) {
+              var s2 = decodeSave(b2);
+              if (s2 && s2.characters_data && s2.characters_data[cid]) {
+                var ch = s2.characters_data[cid];
+                var fullOutfits = [];
+                for (var oi = 0; oi < 200; oi++) fullOutfits.push(oi);
+                var fullMods = [];
+                for (var mi = 0; mi < 20; mi++) fullMods.push(true);
+                ch.unlocked = true;
+                ch.unlocked_clothes_index = fullOutfits;
+                ch.unlocked_modules = fullMods;
+                writeToSavedata("savegame.save", encodeSave(s2));
+                showToast("✓ Unlocked 200 outfits & modules for " + cid + "!");
+                loadAndRenderCharacters();
+              }
+            });
+          };
+        });
+
+        cmListEl.querySelectorAll(".cm-milk-btn").forEach(function (btn) {
+          btn.onclick = function () {
+            var cid = this.getAttribute("data-cid");
+            readFromSavedata("savegame.save").then(function (b2) {
+              var s2 = decodeSave(b2);
+              if (s2 && s2.characters_data && s2.characters_data[cid]) {
+                var ch = s2.characters_data[cid];
+                ch.current_milk_produced = ch.tank_size || 50;
+                ch.horny = 100;
+                writeToSavedata("savegame.save", encodeSave(s2));
+                showToast("✓ Filled milk tank & maxed horny for " + cid + "!");
+                loadAndRenderCharacters();
+              }
+            });
+          };
+        });
+      }).catch(function () {});
+    }
+
+    if (cmRefreshBtn) cmRefreshBtn.onclick = loadAndRenderCharacters;
+    if (cmSearchEl) cmSearchEl.oninput = loadAndRenderCharacters;
+    if (cmFilterEl) cmFilterEl.onchange = loadAndRenderCharacters;
+
+    if (cmMaxAllBtn) {
+      cmMaxAllBtn.onclick = function () {
+        readFromSavedata("savegame.save").then(function (bytes) {
+          var o = decodeSave(bytes);
+          if (o && o.characters_data) {
+            Object.keys(o.characters_data).forEach(function (cid) {
+              var c = o.characters_data[cid];
+              c.stamina = 100;
+              c.energy = 100;
+              c.satiety = 100;
+              c.hygiene = 100;
+              c.horny = 100;
+              c.strength = 100;
+              c.lactation = 100;
+            });
+            writeToSavedata("savegame.save", encodeSave(o));
+            showToast("✓ Maxed stats & stamina for ALL characters!");
+            loadAndRenderCharacters();
+          }
+        });
+      };
+    }
+
+    if (cmUnparkAllBtn) {
+      cmUnparkAllBtn.onclick = function () {
+        readFromSavedata("savegame.save").then(function (bytes) {
+          var o = decodeSave(bytes);
+          if (o && o.characters_data) {
+            Object.keys(o.characters_data).forEach(function (cid) {
+              o.characters_data[cid].parked = false;
+              o.characters_data[cid].unlocked = true;
+            });
+            writeToSavedata("savegame.save", encodeSave(o));
+            showToast("✓ Activated / unparked ALL characters!");
+            loadAndRenderCharacters();
+          }
+        });
+      };
+    }
+
+    loadAndRenderCharacters();
+
+    /* ═══════════════════════════════════════════════════════════════
+       §9  CODE REDEEM GENERATOR & MANAGER WIRING
+       ═══════════════════════════════════════════════════════════════ */
+    var crListEl      = panel.querySelector("#dm-cr-list");
+    var crCodeInput   = panel.querySelector("#dm-cr-code-input");
+    var crRewardSel   = panel.querySelector("#dm-cr-reward-select");
+    var crAmountInput = panel.querySelector("#dm-cr-amount-input");
+    var crUsesSel     = panel.querySelector("#dm-cr-uses-select");
+    var crAddBtn      = panel.querySelector("#dm-cr-add-btn");
+
+    function renderRedeemCodesList() {
+      if (!crListEl) return;
+      var codes = getCustomRedeemCodes();
+      var html = "";
+
+      codes.forEach(function (item, idx) {
+        var usesText = item.maxUses === 999 ? "∞ Unlimited" : item.usesLeft + " left";
+        var usesBadge = item.usesLeft <= 0 && item.maxUses !== 999
+          ? "<span style='color:var(--dm-red);font-weight:700'>Expired</span>"
+          : "<span style='color:var(--dm-gold);font-weight:700'>" + usesText + "</span>";
+
+        html += "<div class='dm-cr-card'>" +
+          "  <div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:4px'>" +
+          "    <span style='font-family:monospace;font-size:12px;font-weight:700;color:var(--dm-accent)'>" + item.code + "</span>" +
+          "    " + usesBadge +
+          "  </div>" +
+          "  <div style='font-size:11px;color:var(--dm-muted);margin-bottom:6px'>" + item.desc + "</div>" +
+          "  <div style='display:flex;gap:4px'>" +
+          "    <button type='button' class='dm-btn dm-btn-primary cr-redeem-btn' data-code='" + item.code + "' style='flex:1;font-size:10px;padding:5px'>🎁 Quick Redeem</button>" +
+          "    <button type='button' class='dm-btn dm-btn-secondary cr-copy-btn' data-code='" + item.code + "' style='font-size:10px;padding:5px'>📋 Copy</button>" +
+          "    <button type='button' class='dm-btn dm-btn-danger cr-del-btn' data-idx='" + idx + "' style='font-size:10px;padding:5px'>🗑️</button>" +
+          "  </div>" +
+          "</div>";
+      });
+
+      if (!html) {
+        html = "<div style='color:var(--dm-muted);font-size:11px;text-align:center;padding:12px'>No redeem codes yet. Create one above!</div>";
+      }
+
+      crListEl.innerHTML = html;
+
+      crListEl.querySelectorAll(".cr-redeem-btn").forEach(function (btn) {
+        btn.onclick = function () {
+          var c = this.getAttribute("data-code");
+          var res = processRedeemCode(c);
+          if (res.success) {
+            showToast("✓ Successfully redeemed " + c + "! (" + res.desc + ")");
+            renderRedeemCodesList();
+            loadAndRenderCharacters();
+            updateEtcTankInfo();
+          } else {
+            showToast("Failed: " + res.desc, true);
+          }
+        };
+      });
+
+      crListEl.querySelectorAll(".cr-copy-btn").forEach(function (btn) {
+        btn.onclick = function () {
+          var c = this.getAttribute("data-code");
+          if (navigator.clipboard) {
+            navigator.clipboard.writeText(c).then(function () {
+              showToast("✓ Copied code '" + c + "' to clipboard!");
+            }).catch(function () {
+              prompt("Copy this code:", c);
+            });
+          } else {
+            prompt("Copy this code:", c);
+          }
+        };
+      });
+
+      crListEl.querySelectorAll(".cr-del-btn").forEach(function (btn) {
+        btn.onclick = function () {
+          var idx = parseInt(this.getAttribute("data-idx"), 10);
+          var all = getCustomRedeemCodes();
+          all.splice(idx, 1);
+          saveCustomRedeemCodes(all);
+          renderRedeemCodesList();
+        };
+      });
+    }
+
+    if (crAddBtn) {
+      crAddBtn.onclick = function () {
+        var rawCode = (crCodeInput ? crCodeInput.value : "").trim().toUpperCase().replace(/[^A-Z0-9_-]/g, "");
+        if (!rawCode) {
+          showToast("Please enter a valid code string (e.g. MEGAPACK)", true);
+          return;
+        }
+
+        var rType = crRewardSel ? crRewardSel.value : "coins";
+        var amount = crAmountInput ? parseInt(crAmountInput.value, 10) || 1000000 : 1000000;
+        var maxUses = crUsesSel ? parseInt(crUsesSel.value, 10) || 999 : 999;
+
+        var desc = "";
+        if (rType === "coins") desc = "$" + amount.toLocaleString() + " Coins";
+        else if (rType === "tickets") desc = amount + " Gacha Tickets";
+        else if (rType === "max_stats") desc = "Max Stats (100% Stamina & Energy)";
+        else if (rType === "full_tank") desc = "Fill All Milk / Cum Tanks 100%";
+        else if (rType === "outfits") desc = "Unlock All Outfits & Modules";
+        else if (rType === "all") desc = "Master VIP ($" + amount.toLocaleString() + " + Tickets + Max Stats + Full Tank)";
+
+        var all = getCustomRedeemCodes();
+        // Remove existing duplicate code if any
+        all = all.filter(function (x) { return x.code !== rawCode; });
+        all.unshift({
+          code: rawCode,
+          rewardType: rType,
+          amount: amount,
+          maxUses: maxUses,
+          usesLeft: maxUses,
+          desc: desc
+        });
+
+        saveCustomRedeemCodes(all);
+        if (crCodeInput) crCodeInput.value = "";
+        showToast("✓ Created working redeem code: " + rawCode);
+        renderRedeemCodesList();
+      };
+    }
+
+    renderRedeemCodesList();
+
+    /* ═══════════════════════════════════════════════════════════════
+       §10  ETC & MILK/CUM STORAGE WIRING
+       ═══════════════════════════════════════════════════════════════ */
+    var etcTankInfo     = panel.querySelector("#dm-etc-tank-info");
+    var etcTankFill     = panel.querySelector("#dm-etc-tank-fill");
+    var etcFillBtn      = panel.querySelector("#dm-etc-fill-btn");
+    var etcEmptyBtn     = panel.querySelector("#dm-etc-empty-btn");
+    var etcSellBtn      = panel.querySelector("#dm-etc-sell-btn");
+    var etcCapSel       = panel.querySelector("#dm-etc-tank-capacity-select");
+    var etcSetCapBtn    = panel.querySelector("#dm-etc-set-tank-btn");
+
+    var etcTicketsBtn   = panel.querySelector("#dm-etc-tickets-btn");
+    var etcHygieneBtn   = panel.querySelector("#dm-etc-hygiene-btn");
+    var etcSatietyBtn   = panel.querySelector("#dm-etc-satiety-btn");
+    var etcHornyBtn     = panel.querySelector("#dm-etc-horny-btn");
+
+    function updateEtcTankInfo() {
+      if (!etcTankInfo) return;
+      readFromSavedata("savegame.save").then(function (bytes) {
+        var o = decodeSave(bytes);
+        if (!o || !o.characters_data) return;
+        var totalStored = 0;
+        var totalCap = 0;
+        Object.keys(o.characters_data).forEach(function (cid) {
+          var c = o.characters_data[cid];
+          totalStored += (c.current_milk_produced || 0);
+          totalCap += (c.tank_size || 50);
+        });
+
+        var pct = totalCap > 0 ? Math.min(100, (totalStored / totalCap) * 100) : 0;
+        etcTankInfo.textContent = totalStored.toFixed(1) + " / " + totalCap.toFixed(0) + " L (" + pct.toFixed(0) + "%)";
+        if (etcTankFill) etcTankFill.style.width = pct + "%";
+      }).catch(function () {});
+    }
+
+    if (etcFillBtn) {
+      etcFillBtn.onclick = function () {
+        readFromSavedata("savegame.save").then(function (bytes) {
+          var o = decodeSave(bytes);
+          if (o && o.characters_data) {
+            Object.keys(o.characters_data).forEach(function (cid) {
+              var c = o.characters_data[cid];
+              c.current_milk_produced = c.tank_size || 50;
+            });
+            writeToSavedata("savegame.save", encodeSave(o));
+            showToast("🥛 All milk/cum tanks filled to 100% capacity!");
+            updateEtcTankInfo();
+            loadAndRenderCharacters();
+          }
+        });
+      };
+    }
+
+    if (etcEmptyBtn) {
+      etcEmptyBtn.onclick = function () {
+        readFromSavedata("savegame.save").then(function (bytes) {
+          var o = decodeSave(bytes);
+          if (o && o.characters_data) {
+            Object.keys(o.characters_data).forEach(function (cid) {
+              o.characters_data[cid].current_milk_produced = 0;
+            });
+            writeToSavedata("savegame.save", encodeSave(o));
+            showToast("🫗 Emptied all milk/cum tanks to 0 L!");
+            updateEtcTankInfo();
+            loadAndRenderCharacters();
+          }
+        });
+      };
+    }
+
+    if (etcSellBtn) {
+      etcSellBtn.onclick = function () {
+        readFromSavedata("savegame.save").then(function (bytes) {
+          var o = decodeSave(bytes);
+          if (o && o.characters_data) {
+            var totalSold = 0;
+            Object.keys(o.characters_data).forEach(function (cid) {
+              var c = o.characters_data[cid];
+              totalSold += (c.current_milk_produced || 0);
+              c.current_milk_produced = 0;
+            });
+            var earnings = Math.round(totalSold * 10);
+            o.money = (o.money || 0) + earnings;
+            writeToSavedata("savegame.save", encodeSave(o));
+            showToast("💰 Sold " + totalSold.toFixed(1) + " L of milk for $" + earnings.toLocaleString() + "!");
+            updateEtcTankInfo();
+            loadAndRenderCharacters();
+          }
+        });
+      };
+    }
+
+    if (etcSetCapBtn && etcCapSel) {
+      etcSetCapBtn.onclick = function () {
+        var cap = parseInt(etcCapSel.value, 10) || 1000;
+        readFromSavedata("savegame.save").then(function (bytes) {
+          var o = decodeSave(bytes);
+          if (o && o.characters_data) {
+            Object.keys(o.characters_data).forEach(function (cid) {
+              o.characters_data[cid].tank_size = cap;
+            });
+            writeToSavedata("savegame.save", encodeSave(o));
+            showToast("✓ Set all character tank capacities to " + cap.toLocaleString() + " L!");
+            updateEtcTankInfo();
+            loadAndRenderCharacters();
+          }
+        });
+      };
+    }
+
+    if (etcTicketsBtn) {
+      etcTicketsBtn.onclick = function () {
+        readFromSavedata("savegame.save").then(function (bytes) {
+          var o = decodeSave(bytes);
+          if (o) {
+            o.tickets = 999;
+            o.gacha_tickets = 999;
+            writeToSavedata("savegame.save", encodeSave(o));
+            showToast("🎟️ Granted 999 Gacha Tickets!");
+          }
+        });
+      };
+    }
+
+    if (etcHygieneBtn) {
+      etcHygieneBtn.onclick = function () {
+        readFromSavedata("savegame.save").then(function (bytes) {
+          var o = decodeSave(bytes);
+          if (o && o.characters_data) {
+            Object.keys(o.characters_data).forEach(function (cid) {
+              o.characters_data[cid].hygiene = 100;
+            });
+            writeToSavedata("savegame.save", encodeSave(o));
+            showToast("🧼 Facility hygiene maxed to 100%!");
+            loadAndRenderCharacters();
+          }
+        });
+      };
+    }
+
+    if (etcSatietyBtn) {
+      etcSatietyBtn.onclick = function () {
+        readFromSavedata("savegame.save").then(function (bytes) {
+          var o = decodeSave(bytes);
+          if (o && o.characters_data) {
+            Object.keys(o.characters_data).forEach(function (cid) {
+              o.characters_data[cid].satiety = 100;
+            });
+            writeToSavedata("savegame.save", encodeSave(o));
+            showToast("🍔 Facility satiety fed & maxed to 100%!");
+            loadAndRenderCharacters();
+          }
+        });
+      };
+    }
+
+    if (etcHornyBtn) {
+      etcHornyBtn.onclick = function () {
+        readFromSavedata("savegame.save").then(function (bytes) {
+          var o = decodeSave(bytes);
+          if (o && o.characters_data) {
+            Object.keys(o.characters_data).forEach(function (cid) {
+              o.characters_data[cid].horny = 100;
+            });
+            writeToSavedata("savegame.save", encodeSave(o));
+            showToast("❤️ All characters horny maxed to 100%!");
+            loadAndRenderCharacters();
+          }
+        });
+      };
+    }
+
+    updateEtcTankInfo();
+    setInterval(updateEtcTankInfo, 5000);
+
+    /* ═══════════════════════════════════════════════════════════════
+       §11  CONTINUOUS UNLIMITED STAMINA & STATS LOCK ENGINE
+       ═══════════════════════════════════════════════════════════════ */
+    function hookEmscriptenFSCheats() {
+      var FS = window.FS || (window.Module && window.Module.FS);
+      if (!FS || FS._digibara_cheats_hooked) return;
+      FS._digibara_cheats_hooked = true;
+      var _origFSWrite = FS.writeFile;
+      FS.writeFile = function (path, data, opts) {
+        var p = String(path);
+        if (p.indexOf("savegame.save") >= 0) {
+          try {
+            var u8 = (typeof data === "string") ? enc.encode(data) : data;
+            var saveObj = decodeSave(u8);
+            if (saveObj && saveObj.characters_data) {
+              var modified = false;
+              if (cfg.max_stats) {
+                Object.keys(saveObj.characters_data).forEach(function (cid) {
+                  var c = saveObj.characters_data[cid];
+                  c.stamina = 100;
+                  c.energy = 100;
+                  c.satiety = 100;
+                  c.hygiene = 100;
+                  c.horny = 100;
+                  c.strength = 100;
+                  c.lactation = 100;
+                });
+                modified = true;
+              }
+              if (cfg.inf_money && (saveObj.money || 0) < 1000000000) {
+                saveObj.money = 1000000000;
+                modified = true;
+              }
+              if (cfg.inf_tank) {
+                Object.keys(saveObj.characters_data).forEach(function (cid) {
+                  var c = saveObj.characters_data[cid];
+                  if ((c.tank_size || 0) < 10000) {
+                    c.tank_size = 10000;
+                    modified = true;
+                  }
+                });
+              }
+              if (modified) {
+                data = encodeSave(saveObj);
+              }
+            }
+          } catch (e) {}
+        }
+        return _origFSWrite.call(FS, path, data, opts);
+      };
+    }
+
+    // Real-time loop ensuring unlimited stamina and live cheats stay clamped
+    setInterval(function () {
+      hookEmscriptenFSCheats();
+      if (!cfg.max_stats && !cfg.inf_money && !cfg.inf_tank) return;
+
+      readFromSavedata("savegame.save").then(function (bytes) {
+        try {
+          var saveObj = decodeSave(bytes);
+          if (!saveObj || !saveObj.characters_data) return;
+          var modified = false;
+          if (cfg.max_stats) {
+            Object.keys(saveObj.characters_data).forEach(function (cid) {
+              var c = saveObj.characters_data[cid];
+              if ((c.stamina || 0) < 100 || (c.energy || 0) < 100 || (c.satiety || 0) < 100 || (c.hygiene || 0) < 100 || (c.horny || 0) < 100) {
+                c.stamina = 100;
+                c.energy = 100;
+                c.satiety = 100;
+                c.hygiene = 100;
+                c.horny = 100;
+                c.strength = 100;
+                c.lactation = 100;
+                modified = true;
+              }
+            });
+          }
+          if (cfg.inf_money && (saveObj.money || 0) < 1000000000) {
+            saveObj.money = 1000000000;
+            modified = true;
+          }
+          if (cfg.inf_tank) {
+            Object.keys(saveObj.characters_data).forEach(function (cid) {
+              var c = saveObj.characters_data[cid];
+              if ((c.tank_size || 0) < 10000) {
+                c.tank_size = 10000;
+                modified = true;
+              }
+            });
+          }
+          if (modified) {
+            writeToSavedata("savegame.save", encodeSave(saveObj));
+          }
+        } catch (e) {}
+      }).catch(function () {});
+    }, 1200);
+
+    // Immediately trigger stat maxing if max_stats toggle is checked
+    var maxStatsToggle = panel.querySelector("#dm-maxstats");
+    if (maxStatsToggle) {
+      var _origMaxStatsChange = maxStatsToggle.onchange;
+      maxStatsToggle.onchange = function (ev) {
+        if (_origMaxStatsChange) _origMaxStatsChange.call(this, ev);
+        if (this.checked) {
+          readFromSavedata("savegame.save").then(function (bytes) {
+            var o = decodeSave(bytes);
+            if (o && o.characters_data) {
+              Object.keys(o.characters_data).forEach(function (cid) {
+                var c = o.characters_data[cid];
+                c.stamina = 100;
+                c.energy = 100;
+                c.satiety = 100;
+                c.hygiene = 100;
+                c.horny = 100;
+                c.strength = 100;
+                c.lactation = 100;
+              });
+              writeToSavedata("savegame.save", encodeSave(o));
+              showToast("⚡ Unlimited Stamina & Stats Active (All locked to 100%)!");
+              loadAndRenderCharacters();
+            }
+          });
+        }
+      };
+    }
+
     } catch (e) {
       console.warn("[DigiBara Modloader Error]:", e);
     }
