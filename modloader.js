@@ -319,47 +319,7 @@
   setTimeout(ensurePatreonOnDisk, 5000);
   setTimeout(ensurePatreonOnDisk, 10000);
 
-  /* ═══════════════════════════════════════════════════════════════
-     §2b  WALLPAPER CONFIG INTERCEPTOR
-     Captures the background module's parameter definitions when the
-     game calls wallpaper_init_config_controls(), and exposes them
-     in the Mods panel so we can see what's configurable.
-     ═══════════════════════════════════════════════════════════════ */
-  window._digibara_wallpaper_definitions = null;
-  window._digibara_wallpaper_callbacks = [];
 
-  var _origWallpaperInit = window.wallpaper_init_config_controls;
-  window.wallpaper_init_config_controls = function(definitions) {
-    window._digibara_wallpaper_definitions = definitions;
-    // Store to localStorage so Mods panel can access it
-    try {
-      localStorage.setItem("digibara_wallpaper_defs", JSON.stringify(definitions));
-    } catch(e) {}
-    // Notify any listeners (e.g. the Mods panel)
-    window._digibara_wallpaper_callbacks.forEach(function(fn) {
-      try { fn(definitions); } catch(e) {}
-    });
-    // Call original if it existed
-    if (typeof _origWallpaperInit === "function") _origWallpaperInit(definitions);
-  };
-
-  // Also intercept future assignments (game sets it after runner.js loads)
-  var _wicDesc = Object.getOwnPropertyDescriptor(window, "wallpaper_init_config_controls");
-  if (!_wicDesc || _wicDesc.configurable !== false) {
-    var _wicVal = window.wallpaper_init_config_controls;
-    Object.defineProperty(window, "wallpaper_init_config_controls", {
-      get: function() { return _wicVal; },
-      set: function(fn) {
-        _wicVal = function(defs) {
-          window._digibara_wallpaper_definitions = defs;
-          try { localStorage.setItem("digibara_wallpaper_defs", JSON.stringify(defs)); } catch(e) {}
-          window._digibara_wallpaper_callbacks.forEach(function(cb) { try { cb(defs); } catch(e) {} });
-          if (typeof fn === "function") fn(defs);
-        };
-      },
-      configurable: true
-    });
-  }
 
   setTimeout(ensurePatreonOnDisk, 20000);
   setTimeout(ensurePatreonOnDisk, 30000);
