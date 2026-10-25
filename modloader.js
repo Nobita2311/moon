@@ -220,6 +220,7 @@
       var ctx = _origGetContext.call(this, type, attrs);
       if (isGameCanvas && ctx) {
         window._digibara_gl = ctx;
+        hookGlContext(ctx);
       }
       if (isGameCanvas && ctx && !ctx._dm_bg_hooked && typeof ctx.clearColor === "function") {
         ctx._dm_bg_hooked = true;
@@ -255,15 +256,15 @@
   var _anchorOffsets = {};
   try { _anchorOffsets = JSON.parse(localStorage.getItem("dm_anchor_offsets") || "{}"); } catch (e) {}
 
-  var _loadedAssetImages = {};
-  var _activeGlTextures = [];
-  var _registeredSpriteKeys = {};
+  var _cleanAssetCanvases = {};
+  var _activeBodyTextures = {};
+  var _allActiveTextures = [];
   var _currentNudgeStep = 5;
-  var _activeAlignTarget = "dick_idle";
+  var _activeAlignTarget = "dick_horny";
 
   var BODY_PART_DEFINITIONS = [
-    { id: "dick_idle", name: "🍆 Dick (Idle)", group: "Genitalia", pattern: /dick_idle/i },
     { id: "dick_horny", name: "🍆 Dick (Horny / Erect)", group: "Genitalia", pattern: /dick_horny/i },
+    { id: "dick_idle", name: "🍆 Dick (Idle)", group: "Genitalia", pattern: /dick_idle/i },
     { id: "dick_foreskin", name: "🍆 Dick Foreskin", group: "Genitalia", pattern: /dick_foreskin/i },
     { id: "balls_left", name: "🥚 Left Ball (Testicle)", group: "Genitalia", pattern: /balls_left/i },
     { id: "balls_right", name: "🥚 Right Ball (Testicle)", group: "Genitalia", pattern: /balls_right/i },
@@ -277,8 +278,8 @@
     { id: "butt_background", name: "🍑 Butt Background", group: "Torso & Rear", pattern: /butt_background/i },
     { id: "foot_idle", name: "🦶 Feet / Legs", group: "Torso & Rear", pattern: /foot_idle/i },
 
-    { id: "eyes_idle", name: "👁 Eyes (Idle)", group: "Face", pattern: /eyes_idle/i },
     { id: "eyes_horny", name: "👁 Eyes (Horny)", group: "Face", pattern: /eyes_horny/i },
+    { id: "eyes_idle", name: "👁 Eyes (Idle)", group: "Face", pattern: /eyes_idle/i },
     { id: "mouth_idle", name: "👄 Mouth (Idle)", group: "Face", pattern: /mouth_idle/i },
     { id: "mouth_speak", name: "👄 Mouth (Speaking)", group: "Face", pattern: /mouth_speak/i },
     { id: "mouth_horny", name: "👄 Mouth (Horny)", group: "Face", pattern: /mouth_horny/i },
@@ -336,157 +337,225 @@
     _anchorOffsets[id] = [coords[0], coords[1]];
   }
 
-  function trackActiveTexture(tex, w, h) {
-    if (!tex) return;
-    for (var i = 0; i < _activeGlTextures.length; i++) {
-      if (_activeGlTextures[i].tex === tex) {
-        _activeGlTextures[i].w = w;
-        _activeGlTextures[i].h = h;
-        return;
+  function getAlphaBBoxFromFlipped(pix, w, h) {
+    var minX = w, maxX = 0, minY = h, maxY = 0;
+    var found = false;
+    for (var y = 0; y < h; y += 4) {
+      var canvasY = h - 1 - y;
+      var row = y * w * 4;
+      for (var x = 0; x < w; x += 4) {
+        if (pix[row + x * 4 + 3] > 20) {
+          if (x < minX) minX = x;
+          if (x > maxX) maxX = x;
+          if (canvasY < minY) minY = canvasY;
+          if (canvasY > maxY) maxY = canvasY;
+          found = true;
+        }
       }
     }
-    _activeGlTextures.push({ tex: tex, w: w, h: h });
-    if (_activeGlTextures.length > 60) _activeGlTextures.shift();
+    if (!found) return null;
+    return { minX: minX, maxX: maxX, minY: minY, maxY: maxY };
+  }
+
+  function detectPartFromBBox(b) {
+    if (!b) return null;
+    var w = b.maxX - b.minX;
+    var h = b.maxY - b.minY;
+    var midY = (b.minY + b.maxY) / 2;
+    var midX = (b.minX + b.maxX) / 2;
+
+    if (w > 850 && h > 1100) return "body_idle";
+    if (midY >= 800 && midY <= 1350 && w > 500 && b.minY > 750) return "belly_big";
+    if (b.minY < 850 && b.maxY > 1350 && midX > 200 && midX < 700) return "dick_horny";
+    if (b.minY >= 1150 && b.maxY <= 1650 && midX < 500 && w > 350) return "dick_idle";
+    if (midX < 530 && midY > 1300 && midY < 1700 && w < 450) return "balls_left";
+    if (midX >= 530 && midY > 1300 && midY < 1700 && w < 450) return "balls_right";
+    if (midY < 420 && h < 350) return "eyes_horny";
+    if (midY >= 440 && midY <= 530 && h < 60) return "mouth_idle";
+    if (b.minX < 150 && midY < 1250) return "butt_cheek_left";
+    if (b.maxX > 900 && midY < 1250) return "butt_cheek_right";
+    if (midY > 750 && midY < 950 && w < 120) return "butt_hole";
+    return null;
+  }
+
+  function copyFlippedPixels(src, dst, w, h) {
+    for (var y = 0; y < h; y++) {
+      var srcRow = (h - 1 - y) * w * 4;
+      var dstRow = y * w * 4;
+      for (var x = 0; x < w * 4; x++) {
+        dst[dstRow + x] = src[srcRow + x];
+      }
+    }
+  }
+
+  function ensureTexturesInspected(gl) {
+    if (!gl) return;
+    for (var i = 0; i < _allActiveTextures.length; i++) {
+      var tex = _allActiveTextures[i];
+      if (!tex || tex._dm_inspected) continue;
+      tex._dm_inspected = true;
+      try {
+        var fbo = gl.createFramebuffer();
+        var prevFbo = gl.getParameter(gl.FRAMEBUFFER_BINDING);
+        var prevTex = gl.getParameter(gl.TEXTURE_BINDING_2D);
+        var prevVp = gl.getParameter(gl.VIEWPORT);
+
+        gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+
+        if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE) {
+          var pix = new Uint8Array(1080 * 1920 * 4);
+          gl.readPixels(0, 0, 1080, 1920, gl.RGBA, gl.UNSIGNED_BYTE, pix);
+          var bbox = getAlphaBBoxFromFlipped(pix, 1080, 1920);
+          if (bbox) {
+            var part = detectPartFromBBox(bbox);
+            if (part) {
+              tex._dm_part = part;
+              _activeBodyTextures[part] = tex;
+
+              var c = document.createElement("canvas");
+              c.width = 1080;
+              c.height = 1920;
+              var cctx = c.getContext("2d");
+              var imgData = cctx.createImageData(1080, 1920);
+              copyFlippedPixels(pix, imgData.data, 1080, 1920);
+              cctx.putImageData(imgData, 0, 0);
+              _cleanAssetCanvases[part] = c;
+
+              var off = getAssetOffset(part);
+              if (off && (off.x !== 0 || off.y !== 0)) {
+                var shiftCanvas = document.createElement("canvas");
+                shiftCanvas.width = 1080;
+                shiftCanvas.height = 1920;
+                var sctx = shiftCanvas.getContext("2d");
+                sctx.drawImage(c, off.x, off.y);
+                gl.bindTexture(gl.TEXTURE_2D, tex);
+                gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, shiftCanvas);
+              }
+            }
+          }
+        }
+        gl.bindFramebuffer(gl.FRAMEBUFFER, prevFbo);
+        gl.bindTexture(gl.TEXTURE_2D, prevTex);
+        gl.viewport(prevVp[0], prevVp[1], prevVp[2], prevVp[3]);
+        gl.deleteFramebuffer(fbo);
+      } catch (err) {
+        console.warn("[Alignment] inspectTexture error:", err);
+      }
+    }
+    if (window._digibara_update_align_ui) {
+      window._digibara_update_align_ui();
+    }
   }
 
   function applyLiveTextureNudge(targetKey, off) {
-    var asset = _loadedAssetImages[targetKey];
-    if (!asset) {
-      var def = getMatchingDef(targetKey);
-      if (def) asset = _loadedAssetImages[def.id];
+    var gl = window._digibara_gl;
+    if (!gl) {
+      var cv = document.getElementById("canvas");
+      if (cv) {
+        gl = cv.getContext("webgl2") || cv.getContext("webgl");
+        window._digibara_gl = gl;
+        if (gl) hookGlContext(gl);
+      }
     }
-    if (!asset || !asset.img) return;
-    var w = asset.w || asset.img.width;
-    var h = asset.h || asset.img.height;
-    if (!w || !h) return;
+    if (!gl) return;
+
+    ensureTexturesInspected(gl);
+
+    var cleanCanvas = _cleanAssetCanvases[targetKey];
+    var tex = _activeBodyTextures[targetKey];
+    if (!cleanCanvas || !tex) {
+      var def = getMatchingDef(targetKey);
+      if (def) {
+        cleanCanvas = _cleanAssetCanvases[def.id];
+        tex = _activeBodyTextures[def.id];
+      }
+    }
+    if (!cleanCanvas || !tex) return;
 
     var c = document.createElement("canvas");
-    c.width = w;
-    c.height = h;
+    c.width = 1080;
+    c.height = 1920;
     var ctx2d = c.getContext("2d");
-    ctx2d.clearRect(0, 0, w, h);
-    ctx2d.drawImage(asset.img, off.x || 0, off.y || 0);
+    ctx2d.clearRect(0, 0, 1080, 1920);
+    ctx2d.drawImage(cleanCanvas, off.x || 0, off.y || 0);
 
-    var gl = window._digibara_gl;
-    if (gl) {
-      var prevTex = gl.getParameter(gl.TEXTURE_BINDING_2D);
-      for (var i = 0; i < _activeGlTextures.length; i++) {
-        var entry = _activeGlTextures[i];
-        if (entry.w === w && entry.h === h && entry.tex) {
-          try {
-            gl.bindTexture(gl.TEXTURE_2D, entry.tex);
-            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, c);
-          } catch (e) {}
-        }
-      }
-      if (prevTex) gl.bindTexture(gl.TEXTURE_2D, prevTex);
-    }
+    var prevTex = gl.getParameter(gl.TEXTURE_BINDING_2D);
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, c);
+    if (prevTex) gl.bindTexture(gl.TEXTURE_2D, prevTex);
   }
 
-  // Intercept images in Emscripten Module.preloadPlugins
-  try {
-    window.Module = window.Module || {};
-    window.Module.preloadPlugins = window.Module.preloadPlugins || [];
-    window.Module.preloadPlugins.unshift({
-      canHandle: function (filename) {
-        return !window.Module.sm && /\.(jpg|jpeg|png|bmp)$/i.test(filename);
-      },
-      handle: function (bytes, filename, successCb, errorCb) {
-        try {
-          var blob = new Blob([bytes], { type: "image/png" });
-          var url = URL.createObjectURL(blob);
-          var img = new Image();
-          img.onload = function () {
-            URL.revokeObjectURL(url);
-            _loadedAssetImages[filename] = { img: img, w: img.width, h: img.height, rawBytes: bytes, filename: filename };
-            var def = getMatchingDef(filename);
-            if (def) {
-              _loadedAssetImages[def.id] = _loadedAssetImages[filename];
-            }
-            if (window._digibara_update_align_ui) {
-              window._digibara_update_align_ui();
-            }
+  function hookGlContext(ctx) {
+    if (!ctx || ctx._dm_aligned_hooked) return;
+    ctx._dm_aligned_hooked = true;
 
-            var off = getAssetOffset(filename);
-            if (off && (off.x !== 0 || off.y !== 0)) {
-              try {
-                var c = document.createElement("canvas");
-                c.width = img.width;
-                c.height = img.height;
-                var ctx2d = c.getContext("2d");
-                ctx2d.clearRect(0, 0, img.width, img.height);
-                ctx2d.drawImage(img, off.x, off.y);
-                c.toBlob(function (shiftedBlob) {
-                  if (shiftedBlob) {
-                    shiftedBlob.arrayBuffer().then(function (buf) {
-                      successCb(new Uint8Array(buf));
-                    }).catch(function () { successCb(bytes); });
-                  } else {
-                    successCb(bytes);
-                  }
-                }, "image/png");
-                return;
-              } catch (e) {
-                console.warn(e);
-              }
-            }
-            successCb(bytes);
-          };
-          img.onerror = function () {
-            URL.revokeObjectURL(url);
-            if (errorCb) errorCb();
-          };
-          img.src = url;
-        } catch (ex) {
-          successCb(bytes);
-        }
+    var _origBindTexture = ctx.bindTexture.bind(ctx);
+    ctx.bindTexture = function (target, tex) {
+      if (target === ctx.TEXTURE_2D && tex && !tex._dm_tracked) {
+        tex._dm_tracked = true;
+        _allActiveTextures.push(tex);
+        if (_allActiveTextures.length > 50) _allActiveTextures.shift();
       }
-    });
-  } catch (e) {}
+      return _origBindTexture(target, tex);
+    };
 
-  // WebGL texImage2D hook to track texture dimensions
-  try {
-    var _origTexImage2D = WebGLRenderingContext.prototype.texImage2D;
-    WebGLRenderingContext.prototype.texImage2D = function () {
-      var res = _origTexImage2D.apply(this, arguments);
+    var _origTexImage2D = ctx.texImage2D.bind(ctx);
+    ctx.texImage2D = function () {
+      var res = _origTexImage2D.apply(ctx, arguments);
       try {
         if (arguments.length >= 9) {
           var target = arguments[0];
           var w = arguments[3];
           var h = arguments[4];
-          if (target === this.TEXTURE_2D && w > 64 && h > 64) {
-            var boundTex = this.getParameter(this.TEXTURE_BINDING_2D);
-            if (boundTex) {
-              boundTex._dm_w = w;
-              boundTex._dm_h = h;
-              trackActiveTexture(boundTex, w, h);
+          if (target === ctx.TEXTURE_2D && w === 1080 && h === 1920) {
+            var boundTex = ctx.getParameter(ctx.TEXTURE_BINDING_2D);
+            if (boundTex && !boundTex._dm_tracked) {
+              boundTex._dm_tracked = true;
+              _allActiveTextures.push(boundTex);
             }
           }
         }
       } catch (ex) {}
       return res;
     };
-  } catch (e) {}
 
-  // Console hook for [CHAR] Loaded key
+    setInterval(function () {
+      if (window._digibara_gl) {
+        ensureTexturesInspected(window._digibara_gl);
+      }
+    }, 800);
+  }
+
+  // Intercept FS_createDataFile in Module
   try {
-    var _origConsoleLog = console.log;
-    console.log = function () {
-      try {
-        var first = arguments[0];
-        if (typeof first === "string" && first.indexOf("[CHAR]") !== -1) {
-          var m = first.match(/\[CHAR\] Loaded key="([^"]+)"/);
-          if (m && m[1]) {
-            var key = m[1];
-            _registeredSpriteKeys[key] = true;
-            if (window._digibara_update_align_ui) {
-              window._digibara_update_align_ui();
+    window.Module = window.Module || {};
+    var _savedFS_createDataFile = window.Module.FS_createDataFile;
+    function wrapFSCreateDataFile(fn) {
+      return function (parent, name, data, canRead, canWrite, canOwn) {
+        try {
+          var fullPath = (parent ? parent + "/" : "") + (name || "");
+          var def = getMatchingDef(fullPath);
+          if (def && data && data.length) {
+            var off = getAssetOffset(def.id);
+            if (off && (off.x !== 0 || off.y !== 0)) {
+              // Preload shifted image asynchronously for next render
             }
           }
-        }
-      } catch (e) {}
-      return _origConsoleLog.apply(console, arguments);
-    };
+        } catch (e) {}
+        return fn ? fn.apply(this, arguments) : null;
+      };
+    }
+    if (_savedFS_createDataFile) {
+      window.Module.FS_createDataFile = wrapFSCreateDataFile(_savedFS_createDataFile);
+    } else {
+      Object.defineProperty(window.Module, "FS_createDataFile", {
+        configurable: true,
+        enumerable: true,
+        get: function () { return _savedFS_createDataFile; },
+        set: function (fn) { _savedFS_createDataFile = wrapFSCreateDataFile(fn); }
+      });
+    }
   } catch (e) {}
 
   /* ═══════════════════════════════════════════════════════════════
@@ -2137,7 +2206,20 @@
     };
 
     fab.onclick = function () {
-      panel.style.display = panel.style.display === "block" ? "none" : "block";
+      var opening = panel.style.display !== "block";
+      panel.style.display = opening ? "block" : "none";
+      if (opening) {
+        if (!window._digibara_gl) {
+          var cv = document.getElementById("canvas");
+          if (cv) {
+            window._digibara_gl = cv.getContext("webgl2") || cv.getContext("webgl");
+            if (window._digibara_gl) hookGlContext(window._digibara_gl);
+          }
+        }
+        if (window._digibara_gl) {
+          ensureTexturesInspected(window._digibara_gl);
+        }
+      }
     };
 
     api("GET").then(function (c) {
@@ -2394,9 +2476,13 @@
       updateCoordsDisplay();
 
       if (detectedCount) {
-        var total = Object.keys(_loadedAssetImages).length;
-        if (total > 0) {
-          detectedCount.textContent = "✓ " + total + " Loaded";
+        var readyCount = Object.keys(_activeBodyTextures).length;
+        if (readyCount > 0) {
+          detectedCount.textContent = "✓ " + readyCount + " Ready";
+          detectedCount.style.color = "var(--dm-green)";
+        } else {
+          detectedCount.textContent = "Active";
+          detectedCount.style.color = "var(--dm-gold)";
         }
       }
     }
