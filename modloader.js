@@ -1,32 +1,37 @@
 /* DigiBara Mods — Extended Edition v3 (injected by serve_mods.py) */
 (function () {
   /* ═══════════════════════════════════════════════════════════════
-     §0  CUSTOM IN-GAME ROOM BACKGROUND ENGINE
-         Strategy: Transparent canvas screen clear + Canvas CSS background
-         - Canvas WebGL context gets alpha:true.
-         - Room background image is set directly as canvas CSS background-image
-           with background-color: transparent.
-         - During game bootup (assets, shaders, fonts compilation), hooks stay IDLE
-           so font texture atlases and offscreen surfaces are NEVER corrupted.
-         - Once the game is ready and rendering the room, when GameMaker clears the
-           main canvas screen to black (Background Black room clear), we clear to
-           rgba(0,0,0,0).
-         - The transparent room clear shows the canvas CSS background image behind
-           the character and all room elements!
-         - Sprites and UI draw with full opacity on top.
+     §0  CUSTOM IN-GAME ROOM BACKGROUND ENGINE (WebGL Room Painter)
+         - Renders the custom wallpaper directly into the room layer
+           right after the room background is cleared, sitting BEHIND
+           the character and sprites.
+         - Unbinds GameMaker's VAO (both WebGL 2 and OES extension)
+           before drawing to guarantee zero font or sprite corruption.
+         - Correct right-side-up UV orientation.
      ═══════════════════════════════════════════════════════════════ */
   var _customRoomBg = null;
   try { _customRoomBg = localStorage.getItem("dm_custom_room_bg"); } catch (e) {}
   window._digibara_custom_room_bg = !!_customRoomBg;
 
   var _gameReady = false;
+  var _bgImageElement = null;
+  var _bgTextureNeedsUpdate = false;
+  var _bgTexture = null;
+  var _bgShader = null;
+  var _bgQuadBuffer = null;
+  var _drawnThisFrame = false;
+  var _savedClearColor = [0, 0, 0, 1];
 
-  // Track when the game finishes loading so we NEVER touch bootloader / font generation
+  function frameReset() {
+    _drawnThisFrame = false;
+    requestAnimationFrame(frameReset);
+  }
+  requestAnimationFrame(frameReset);
+
   function monitorGameLoad() {
     if (_gameReady) return;
     var sp = document.getElementById("spinner");
     var cv = document.getElementById("canvas");
-    // When spinner is gone and canvas is visible, game has finished loading assets
     if (cv && cv.style.display === "block" && (!sp || sp.style.display === "none" || sp.hidden)) {
       setTimeout(function () {
         _gameReady = true;
@@ -38,48 +43,131 @@
   requestAnimationFrame(monitorGameLoad);
   setTimeout(function () { _gameReady = true; }, 6000);
 
-  function applyRoomBgToCanvas(url) {
-    window._digibara_custom_room_bg = !!url;
-    var cv = document.getElementById("canvas");
-    // Clean up any legacy overlay div if present
-    var oldDiv = document.getElementById("dm-room-bg-div");
-    if (oldDiv && oldDiv.parentNode) oldDiv.parentNode.removeChild(oldDiv);
-
-    if (!cv) return;
-    if (url) {
-      cv.style.setProperty("background-image", "url('" + url + "')", "important");
-      cv.style.setProperty("background-size", "cover", "important");
-      cv.style.setProperty("background-position", "center", "important");
-      cv.style.setProperty("background-repeat", "no-repeat", "important");
-      cv.style.setProperty("background-color", "transparent", "important");
-    } else {
-      cv.style.removeProperty("background-image");
-      cv.style.removeProperty("background-size");
-      cv.style.removeProperty("background-position");
-      cv.style.removeProperty("background-repeat");
-      cv.style.setProperty("background-color", "black", "important");
-    }
-  }
-
   function loadCustomRoomBgImage(url) {
-    applyRoomBgToCanvas(url);
+    if (!url) {
+      _bgImageElement = null;
+      _bgTextureNeedsUpdate = true;
+      return;
+    }
+    var img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = function () {
+      _bgImageElement = img;
+      _bgTextureNeedsUpdate = true;
+    };
+    img.src = url;
   }
 
-  if (_customRoomBg) {
-    if (document.readyState !== "loading") {
-      applyRoomBgToCanvas(_customRoomBg);
-    } else {
-      document.addEventListener("DOMContentLoaded", function () {
-        applyRoomBgToCanvas(_customRoomBg);
-      });
+  if (_customRoomBg) loadCustomRoomBgImage(_customRoomBg);
+
+  function initBgRenderer(gl) {
+    if (_bgShader) return;
+    // Map UVs so top of image (v_u.y = 0) aligns with top of screen (a_p.y = 1)
+    var vs = "attribute vec2 a_p; varying vec2 v_u; void main() { v_u = vec2((a_p.x + 1.0) * 0.5, (1.0 - a_p.y) * 0.5); gl_Position = vec4(a_p, 0.0, 1.0); }";
+    var fs = "precision mediump float; varying vec2 v_u; uniform sampler2D u_t; void main() { gl_FragColor = texture2D(u_t, v_u); }";
+    function compile(type, src) {
+      var s = gl.createShader(type);
+      gl.shaderSource(s, src);
+      gl.compileShader(s);
+      return s;
     }
-    var _bgInitInterval = setInterval(function () {
-      var cv = document.getElementById("canvas");
-      if (cv) {
-        applyRoomBgToCanvas(_customRoomBg);
-        clearInterval(_bgInitInterval);
-      }
-    }, 200);
+    var prog = gl.createProgram();
+    gl.attachShader(prog, compile(gl.VERTEX_SHADER, vs));
+    gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, fs));
+    gl.linkProgram(prog);
+    _bgShader = {
+      prog: prog,
+      a_p: gl.getAttribLocation(prog, "a_p"),
+      u_t: gl.getUniformLocation(prog, "u_t")
+    };
+
+    _bgQuadBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, _bgQuadBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+      -1, -1,
+       1, -1,
+      -1,  1,
+      -1,  1,
+       1, -1,
+       1,  1
+    ]), gl.STATIC_DRAW);
+    gl.bindBuffer(gl.ARRAY_BUFFER, null);
+  }
+
+  function drawCustomRoomBg(gl) {
+    if (!_bgImageElement) return;
+    initBgRenderer(gl);
+    if (!_bgShader) return;
+
+    if (_bgTextureNeedsUpdate) {
+      _bgTextureNeedsUpdate = false;
+      if (!_bgTexture) _bgTexture = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, _bgTexture);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, _bgImageElement);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.bindTexture(gl.TEXTURE_2D, null);
+    }
+    if (!_bgTexture) return;
+
+    var prevProg = gl.getParameter(gl.CURRENT_PROGRAM);
+    var prevBuf = gl.getParameter(gl.ARRAY_BUFFER_BINDING);
+    var prevActTex = gl.getParameter(gl.ACTIVE_TEXTURE);
+    var prevTex = gl.getParameter(gl.TEXTURE_BINDING_2D);
+    var prevBlend = gl.isEnabled(gl.BLEND);
+    var prevDepth = gl.isEnabled(gl.DEPTH_TEST);
+    var prevDepthMask = gl.getParameter(gl.DEPTH_WRITEMASK);
+    var prevScissor = gl.isEnabled(gl.SCISSOR_TEST);
+    var prevCull = gl.isEnabled(gl.CULL_FACE);
+    var prevMask = gl.getParameter(gl.COLOR_WRITEMASK);
+
+    // Unbind active VAO so GameMaker attribute bindings are never modified
+    var vaoExt = gl.getExtension("OES_vertex_array_object");
+    var prevVAO = null;
+    if (typeof gl.bindVertexArray === "function") {
+      prevVAO = gl.getParameter(gl.VERTEX_ARRAY_BINDING);
+      gl.bindVertexArray(null);
+    } else if (vaoExt) {
+      prevVAO = gl.getParameter(vaoExt.VERTEX_ARRAY_BINDING_OES);
+      vaoExt.bindVertexArrayOES(null);
+    }
+
+    gl.disable(gl.BLEND);
+    gl.disable(gl.DEPTH_TEST);
+    gl.depthMask(false);
+    gl.disable(gl.SCISSOR_TEST);
+    gl.disable(gl.CULL_FACE);
+    gl.colorMask(true, true, true, true);
+
+    gl.useProgram(_bgShader.prog);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, _bgTexture);
+    gl.uniform1i(_bgShader.u_t, 0);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, _bgQuadBuffer);
+    gl.enableVertexAttribArray(_bgShader.a_p);
+    gl.vertexAttribPointer(_bgShader.a_p, 2, gl.FLOAT, false, 0, 0);
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+    gl.disableVertexAttribArray(_bgShader.a_p);
+
+    // Restore state
+    gl.bindBuffer(gl.ARRAY_BUFFER, prevBuf);
+    if (typeof gl.bindVertexArray === "function") {
+      gl.bindVertexArray(prevVAO);
+    } else if (vaoExt && prevVAO) {
+      vaoExt.bindVertexArrayOES(prevVAO);
+    }
+    gl.activeTexture(prevActTex);
+    gl.bindTexture(gl.TEXTURE_2D, prevTex);
+    gl.useProgram(prevProg);
+    gl.colorMask(prevMask[0], prevMask[1], prevMask[2], prevMask[3]);
+    gl.depthMask(prevDepthMask);
+    if (prevBlend) gl.enable(gl.BLEND);
+    if (prevDepth) gl.enable(gl.DEPTH_TEST);
+    if (prevScissor) gl.enable(gl.SCISSOR_TEST);
+    if (prevCull) gl.enable(gl.CULL_FACE);
   }
 
   function compressAndProcessImage(fileOrBlob, maxWidth, maxHeight, quality, callback) {
@@ -96,7 +184,6 @@
             c.height = targetH;
             var ctx2d = c.getContext("2d");
 
-            // Cover fit: fill full 1080×1920 with cropped image
             var imgW = img.width;
             var imgH = img.height;
             var scale = Math.max(targetW / imgW, targetH / imgH);
@@ -126,32 +213,15 @@
     }
   }
 
-  /* ── WebGL transparency hook ──
-     1. Force alpha:true on the game canvas WebGL context.
-     2. Wait until the game has fully booted (_gameReady is true) before intercepting.
-     3. Only intercept clearColor when clearing the MAIN canvas framebuffer (not offscreen textures/fonts).
-     4. NEVER touch colorMask!
-  */
   try {
     var _origGetContext = HTMLCanvasElement.prototype.getContext;
     HTMLCanvasElement.prototype.getContext = function (type, attrs) {
       var isGameCanvas = this && (this.id === "canvas" || (this.classList && this.classList.contains("emscripten")));
-      if (isGameCanvas && typeof type === "string" && type.indexOf("webgl") !== -1) {
-        var newAttrs = {};
-        if (attrs && typeof attrs === "object") {
-          for (var k in attrs) {
-            if (Object.prototype.hasOwnProperty.call(attrs, k)) newAttrs[k] = attrs[k];
-          }
-        }
-        newAttrs.alpha = true;
-        attrs = newAttrs;
-      }
       var ctx = _origGetContext.call(this, type, attrs);
       if (isGameCanvas && ctx && !ctx._dm_bg_hooked && typeof ctx.clearColor === "function") {
         ctx._dm_bg_hooked = true;
         var _origClearColor = ctx.clearColor.bind(ctx);
         var _origClear = ctx.clear.bind(ctx);
-        var _savedClearColor = [0, 0, 0, 1];
 
         ctx.clearColor = function (r, g, b, a) {
           _savedClearColor = [r, g, b, a];
@@ -159,33 +229,21 @@
         };
 
         ctx.clear = function (mask) {
-          if (_gameReady && window._digibara_custom_room_bg && (mask & 16384)) {
+          var res = _origClear(mask);
+          if (_gameReady && window._digibara_custom_room_bg && !_drawnThisFrame && (mask & 16384)) {
             var fbo = null;
             try { fbo = ctx.getParameter(ctx.FRAMEBUFFER_BINDING); } catch (e) {}
-            // Only clear transparent if clearing the main canvas screen and game clear color is dark/black
             if (!fbo && _savedClearColor[0] < 0.08 && _savedClearColor[1] < 0.08 && _savedClearColor[2] < 0.08) {
-              _origClearColor(0, 0, 0, 0);
-              var res = _origClear(mask);
-              _origClearColor(_savedClearColor[0], _savedClearColor[1], _savedClearColor[2], _savedClearColor[3]);
-              return res;
+              _drawnThisFrame = true;
+              try { drawCustomRoomBg(ctx); } catch (e) { console.warn(e); }
             }
           }
-          return _origClear(mask);
+          return res;
         };
       }
       return ctx;
     };
   } catch (e) {}
-
-  // Keep canvas transparent while custom room background is active
-  setInterval(function () {
-    if (window._digibara_custom_room_bg && _customRoomBg) {
-      var cv = document.getElementById("canvas");
-      if (cv && (!cv.style.backgroundImage || cv.style.backgroundColor !== "transparent")) {
-        applyRoomBgToCanvas(_customRoomBg);
-      }
-    }
-  }, 1000);
 
   /* ═══════════════════════════════════════════════════════════════
      §1  VIRTUAL CLOCK (Game Speed Multiplier)
