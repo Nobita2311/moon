@@ -259,6 +259,8 @@
   var _cleanAssetCanvases = {};
   var _activeBodyTextures = {};
   var _allActiveTextures = [];
+  var _loadedAssetImages = {};
+  var _registeredSpriteKeys = {};
   var _currentNudgeStep = 5;
   var _activeAlignTarget = "dick_horny";
 
@@ -2448,14 +2450,20 @@
         groups[g].push(def);
       });
 
-      Object.keys(_loadedAssetImages).forEach(function (fn) {
+      Object.keys(_cleanAssetCanvases).forEach(function (fn) {
         if (!getMatchingDef(fn)) {
           var name = fn.split("/").pop();
           groups["✨ Detected / Custom Sprites"].push({ id: fn, name: name });
         }
       });
+      Object.keys(_loadedAssetImages).forEach(function (fn) {
+        if (!getMatchingDef(fn) && !_cleanAssetCanvases[fn]) {
+          var name = fn.split("/").pop();
+          groups["✨ Detected / Custom Sprites"].push({ id: fn, name: name });
+        }
+      });
       Object.keys(_registeredSpriteKeys).forEach(function (k) {
-        if (!getMatchingDef(k)) {
+        if (!getMatchingDef(k) && !_cleanAssetCanvases[k]) {
           groups["✨ Detected / Custom Sprites"].push({ id: k, name: k });
         }
       });
