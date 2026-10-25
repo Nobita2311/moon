@@ -879,22 +879,39 @@
     return "";
   }
 
-  function showToast(msg, isErr) {
+  function showToast(msg, isErr, autoReload) {
     var t = document.getElementById("dm-toast");
     if (!t) {
       t = document.createElement("div");
       t.id = "dm-toast";
       document.body.appendChild(t);
     }
-    t.textContent = msg;
+    t.innerHTML = "<div style='display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap'>" +
+      "<span>" + msg + "</span>" +
+      "<button type='button' id='dm-toast-reload-btn' style='background:rgba(255,255,255,0.25);border:1px solid #fff;color:#fff;border-radius:4px;padding:3px 8px;font-size:11px;font-weight:700;cursor:pointer'>🔄 Reload Game</button>" +
+      "</div>";
     t.style.display = "block";
     t.style.background = isErr ? "#5a1f2e" : "linear-gradient(135deg, #12362a, #1f6b52)";
     t.style.borderColor = isErr ? "#f87171" : "#6ee7b7";
     t.style.color = isErr ? "#fca5a5" : "#a7f3d0";
+
+    var rBtn = t.querySelector("#dm-toast-reload-btn");
+    if (rBtn) {
+      rBtn.onclick = function () {
+        window.location.reload();
+      };
+    }
+
     clearTimeout(t._timer);
-    t._timer = setTimeout(function () {
-      t.style.display = "none";
-    }, 3200);
+    if (autoReload) {
+      t._timer = setTimeout(function () {
+        window.location.reload();
+      }, 1200);
+    } else {
+      t._timer = setTimeout(function () {
+        t.style.display = "none";
+      }, 6000);
+    }
   }
 
   function applyCodeRewardToSave(rewardItem) {
@@ -955,6 +972,12 @@
 
         if (modified) {
           writeToSavedata("savegame.save", encodeSave(data));
+          try {
+            var FS = window.FS || (window.Module && window.Module.FS);
+            if (FS && typeof FS.syncfs === "function") {
+              FS.syncfs(false, function () {});
+            }
+          } catch (e) {}
         }
         return modified;
       } catch (e) {
@@ -1002,6 +1025,9 @@
 
     var rewardCoins = (item.rewardType === "coins" || item.rewardType === "all") ? (item.amount || 1000000) : 50000;
     applyCodeRewardToSave(item);
+    setTimeout(function () {
+      showToast("✓ Redeemed code '" + item.code + "' (" + item.desc + ")! Reload game to sync all tickets & stats on screen.", false, false);
+    }, 200);
     return {
       success: true,
       coins: rewardCoins,
@@ -1009,6 +1035,26 @@
       text: JSON.stringify({ valid: true, coins: rewardCoins, end_date: "2030-01-01" })
     };
   }
+
+
+  /* ═══════════════════════════════════════════════════════════════
+     KEYBOARD UNBLOCKER: PREVENT GAMEMAKER FROM BLOCKING INPUT TYPING
+     ═══════════════════════════════════════════════════════════════ */
+  function unblockAllInputs(e) {
+    var t = e.target;
+    if (!t) return;
+    var tag = (t.tagName || "").toUpperCase();
+    if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA" || t.isContentEditable) {
+      e.stopPropagation();
+      if (typeof e.stopImmediatePropagation === "function") {
+        e.stopImmediatePropagation();
+      }
+    }
+  }
+  ["keydown", "keyup", "keypress"].forEach(function (evt) {
+    window.addEventListener(evt, unblockAllInputs, true);
+    document.addEventListener(evt, unblockAllInputs, true);
+  });
 
   /* A. Intercept window.fetch() */
   var _origFetch = (typeof window.fetch === "function") ? window.fetch.bind(window) : null;
@@ -2253,7 +2299,11 @@
       ".dm-nudge-center:hover{background:rgba(255,217,138,.2);border-color:var(--dm-gold)}",
       ".dm-step-btn{padding:4px 9px;font-size:11px;font-weight:700;border-radius:6px;border:1px solid var(--dm-border);background:var(--dm-bg2);color:var(--dm-muted);cursor:pointer;transition:all .15s}",
       ".dm-step-btn:hover{color:var(--dm-text);background:var(--dm-bg3)}",
-      ".dm-step-btn.active{background:var(--dm-accent);color:#fff;border-color:var(--dm-accent)}",
+      ".dm-step-btn.active{background:var(--dm-accent);color:#fff;border-color:var(--dm-accent)},
+
+      /* Enable normal typing and text selection on all mod inputs */
+      "#dm-panel input, #dm-panel select, #dm-panel textarea{user-select:text !important;-webkit-user-select:text !important;cursor:text !important;pointer-events:auto !important;}",
+      "#dm-panel input:focus, #dm-panel select:focus, #dm-panel textarea:focus{outline:none;border-color:var(--dm-accent);box-shadow:0 0 0 2px rgba(200,109,215,.3)}" ",
 
       /* Toast Notification */
       "#dm-toast{position:fixed;top:20px;left:50%;transform:translateX(-50%);z-index:999999;padding:10px 18px;border-radius:8px;font:700 13px 'Segoe UI',Arial;display:none;box-shadow:0 8px 30px rgba(0,0,0,0.85);border:1px solid;pointer-events:none;transition:all .2s;text-align:center;max-width:90vw}",
@@ -3540,7 +3590,7 @@
                 s2.characters_data[cid].parked = !wasParked;
                 if (wasParked) s2.characters_data[cid].unlocked = true;
                 writeToSavedata("savegame.save", encodeSave(s2));
-                showToast(cid + " is now " + (wasParked ? "ACTIVE in Room!" : "PARKED!"));
+                showToast(cid + " is now " + (wasParked ? "ACTIVE in Room!" : "PARKED!"), false, true);
                 loadAndRenderCharacters();
               }
             });
@@ -3562,7 +3612,7 @@
                 ch.strength = 100;
                 ch.lactation = 100;
                 writeToSavedata("savegame.save", encodeSave(s2));
-                showToast("✓ Maxed all stats (100% Stamina) for " + cid + "!");
+                showToast("✓ Maxed all stats (100% Stamina) for " + cid + "!", false, true);
                 loadAndRenderCharacters();
               }
             });
@@ -3584,7 +3634,7 @@
                 ch.unlocked_clothes_index = fullOutfits;
                 ch.unlocked_modules = fullMods;
                 writeToSavedata("savegame.save", encodeSave(s2));
-                showToast("✓ Unlocked 200 outfits & modules for " + cid + "!");
+                showToast("✓ Unlocked 200 outfits & modules for " + cid + "!", false, true);
                 loadAndRenderCharacters();
               }
             });
@@ -3601,7 +3651,7 @@
                 ch.current_milk_produced = ch.tank_size || 50;
                 ch.horny = 100;
                 writeToSavedata("savegame.save", encodeSave(s2));
-                showToast("✓ Filled milk tank & maxed horny for " + cid + "!");
+                showToast("✓ Filled milk tank & maxed horny for " + cid + "!", false, true);
                 loadAndRenderCharacters();
               }
             });
@@ -3630,7 +3680,7 @@
               c.lactation = 100;
             });
             writeToSavedata("savegame.save", encodeSave(o));
-            showToast("✓ Maxed stats & stamina for ALL characters!");
+            showToast("✓ Maxed stats & stamina for ALL characters!", false, true);
             loadAndRenderCharacters();
           }
         });
@@ -3647,7 +3697,7 @@
               o.characters_data[cid].unlocked = true;
             });
             writeToSavedata("savegame.save", encodeSave(o));
-            showToast("✓ Activated / unparked ALL characters!");
+            showToast("✓ Activated / unparked ALL characters!", false, true);
             loadAndRenderCharacters();
           }
         });
@@ -3702,12 +3752,12 @@
           var c = this.getAttribute("data-code");
           var res = processRedeemCode(c);
           if (res.success) {
-            showToast("✓ Successfully redeemed " + c + "! (" + res.desc + ")");
+            showToast("✓ Successfully redeemed " + c + "! (" + res.desc + ")", false, true);
             renderRedeemCodesList();
             loadAndRenderCharacters();
             updateEtcTankInfo();
           } else {
-            showToast("Failed: " + res.desc, true);
+            showToast("Failed: " + res.desc, true, false);
           }
         };
       });
@@ -3824,7 +3874,7 @@
               c.current_milk_produced = c.tank_size || 50;
             });
             writeToSavedata("savegame.save", encodeSave(o));
-            showToast("🥛 All milk/cum tanks filled to 100% capacity!");
+            showToast("🥛 All milk/cum tanks filled to 100% capacity!", false, true);
             updateEtcTankInfo();
             loadAndRenderCharacters();
           }
@@ -3841,7 +3891,7 @@
               o.characters_data[cid].current_milk_produced = 0;
             });
             writeToSavedata("savegame.save", encodeSave(o));
-            showToast("🫗 Emptied all milk/cum tanks to 0 L!");
+            showToast("🫗 Emptied all milk/cum tanks to 0 L!", false, true);
             updateEtcTankInfo();
             loadAndRenderCharacters();
           }
@@ -3863,7 +3913,7 @@
             var earnings = Math.round(totalSold * 10);
             o.money = (o.money || 0) + earnings;
             writeToSavedata("savegame.save", encodeSave(o));
-            showToast("💰 Sold " + totalSold.toFixed(1) + " L of milk for $" + earnings.toLocaleString() + "!");
+            showToast("💰 Sold " + totalSold.toFixed(1) + " L of milk for $" + earnings.toLocaleString() + "!", false, true);
             updateEtcTankInfo();
             loadAndRenderCharacters();
           }
@@ -3881,7 +3931,7 @@
               o.characters_data[cid].tank_size = cap;
             });
             writeToSavedata("savegame.save", encodeSave(o));
-            showToast("✓ Set all character tank capacities to " + cap.toLocaleString() + " L!");
+            showToast("✓ Set all character tank capacities to " + cap.toLocaleString() + " L!", false, true);
             updateEtcTankInfo();
             loadAndRenderCharacters();
           }
@@ -3897,7 +3947,7 @@
             o.tickets = 999;
             o.gacha_tickets = 999;
             writeToSavedata("savegame.save", encodeSave(o));
-            showToast("🎟️ Granted 999 Gacha Tickets!");
+            showToast("🎟️ Granted 999 Gacha Tickets!", false, true);
           }
         });
       };
@@ -3912,7 +3962,7 @@
               o.characters_data[cid].hygiene = 100;
             });
             writeToSavedata("savegame.save", encodeSave(o));
-            showToast("🧼 Facility hygiene maxed to 100%!");
+            showToast("🧼 Facility hygiene maxed to 100%!", false, true);
             loadAndRenderCharacters();
           }
         });
@@ -3928,7 +3978,7 @@
               o.characters_data[cid].satiety = 100;
             });
             writeToSavedata("savegame.save", encodeSave(o));
-            showToast("🍔 Facility satiety fed & maxed to 100%!");
+            showToast("🍔 Facility satiety fed & maxed to 100%!", false, true);
             loadAndRenderCharacters();
           }
         });
@@ -3944,7 +3994,7 @@
               o.characters_data[cid].horny = 100;
             });
             writeToSavedata("savegame.save", encodeSave(o));
-            showToast("❤️ All characters horny maxed to 100%!");
+            showToast("❤️ All characters horny maxed to 100%!", false, true);
             loadAndRenderCharacters();
           }
         });
@@ -4072,7 +4122,7 @@
                 c.lactation = 100;
               });
               writeToSavedata("savegame.save", encodeSave(o));
-              showToast("⚡ Unlimited Stamina & Stats Active (All locked to 100%)!");
+              showToast("⚡ Unlimited Stamina & Stats Active (All locked to 100%)!", false, true);
               loadAndRenderCharacters();
             }
           });
