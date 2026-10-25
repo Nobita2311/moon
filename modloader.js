@@ -1,150 +1,81 @@
 /* DigiBara Mods — Extended Edition v3 (injected by serve_mods.py) */
 (function () {
   /* ═══════════════════════════════════════════════════════════════
-     §0  CUSTOM IN-GAME ROOM BACKGROUND ENGINE (WebGL Room Painter)
+     §0  CUSTOM IN-GAME ROOM BACKGROUND ENGINE
+         Strategy: transparent WebGL canvas + DOM overlay div behind it.
+         - Force WebGL alpha:true so the canvas is transparent.
+         - Override clearColor so the room clear sets alpha=0.
+         - Sprites/UI remain fully opaque (GameMaker outputs alpha=1).
+         - A sibling <div> behind the canvas shows the user's image.
      ═══════════════════════════════════════════════════════════════ */
   var _customRoomBg = null;
   try { _customRoomBg = localStorage.getItem("dm_custom_room_bg"); } catch (e) {}
   window._digibara_custom_room_bg = !!_customRoomBg;
 
-  var _bgImageElement = null;
-  var _bgTextureNeedsUpdate = false;
-  var _bgTexture = null;
-  var _bgShader = null;
-  var _bgQuadBuffer = null;
-  var _bgVAO = null;
-  var _lastClearWasBlack = false;
-  var _drawnThisFrame = false;
+  /* ── DOM overlay div ── */
+  var _bgDiv = null;
+
+  function ensureBgDiv() {
+    if (_bgDiv) return _bgDiv;
+    var cv = document.getElementById("canvas");
+    if (!cv || !cv.parentNode) return null;
+    _bgDiv = document.createElement("div");
+    _bgDiv.id = "dm-room-bg-div";
+    _bgDiv.style.cssText = [
+      "position:absolute",
+      "top:0", "left:0", "width:100%", "height:100%",
+      "background-size:cover",
+      "background-position:center",
+      "background-repeat:no-repeat",
+      "pointer-events:none",
+      "z-index:0"
+    ].join(";");
+    // Insert before the canvas so it sits behind it
+    cv.parentNode.insertBefore(_bgDiv, cv);
+    // Make canvas stacking context sit above the div
+    cv.style.position = "relative";
+    cv.style.zIndex = "1";
+    return _bgDiv;
+  }
+
+  function applyRoomBgDiv(url) {
+    window._digibara_custom_room_bg = !!url;
+    // Make sure the canvas parent is positioned so absolute child works
+    var cv = document.getElementById("canvas");
+    if (cv && cv.parentNode && getComputedStyle(cv.parentNode).position === "static") {
+      cv.parentNode.style.position = "relative";
+    }
+    var div = ensureBgDiv();
+    if (!div) return;
+    if (url) {
+      div.style.backgroundImage = "url('" + url + "')";
+      div.style.display = "block";
+    } else {
+      div.style.backgroundImage = "";
+      div.style.display = "none";
+    }
+  }
 
   function loadCustomRoomBgImage(url) {
-    if (!url) {
-      _bgImageElement = null;
-      _bgTextureNeedsUpdate = true;
-      return;
-    }
-    var img = new Image();
-    img.crossOrigin = "anonymous";
-    img.onload = function () {
-      _bgImageElement = img;
-      _bgTextureNeedsUpdate = true;
-    };
-    img.src = url;
+    applyRoomBgDiv(url);
   }
 
-  if (_customRoomBg) loadCustomRoomBgImage(_customRoomBg);
-
-  function resetFrameState() {
-    _drawnThisFrame = false;
-    requestAnimationFrame(resetFrameState);
-  }
-  requestAnimationFrame(resetFrameState);
-
-  function initBgRenderer(gl) {
-    if (_bgShader) return;
-    var vs = "attribute vec2 a_p; varying vec2 v_u; void main() { v_u = (a_p + 1.0) * 0.5; gl_Position = vec4(a_p, 0.0, 1.0); }";
-    var fs = "precision mediump float; varying vec2 v_u; uniform sampler2D u_t; void main() { gl_FragColor = texture2D(u_t, v_u); }";
-    function compile(type, src) {
-      var s = gl.createShader(type);
-      gl.shaderSource(s, src);
-      gl.compileShader(s);
-      return s;
-    }
-    var prog = gl.createProgram();
-    gl.attachShader(prog, compile(gl.VERTEX_SHADER, vs));
-    gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, fs));
-    gl.linkProgram(prog);
-    _bgShader = {
-      prog: prog,
-      a_p: gl.getAttribLocation(prog, "a_p"),
-      u_t: gl.getUniformLocation(prog, "u_t")
-    };
-
-    _bgQuadBuffer = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, _bgQuadBuffer);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
-      -1, -1,
-       1, -1,
-      -1,  1,
-      -1,  1,
-       1, -1,
-       1,  1
-    ]), gl.STATIC_DRAW);
-    gl.bindBuffer(gl.ARRAY_BUFFER, null);
-
-    if (typeof gl.createVertexArray === "function") {
-      try {
-        _bgVAO = gl.createVertexArray();
-        gl.bindVertexArray(_bgVAO);
-        gl.bindBuffer(gl.ARRAY_BUFFER, _bgQuadBuffer);
-        gl.enableVertexAttribArray(_bgShader.a_p);
-        gl.vertexAttribPointer(_bgShader.a_p, 2, gl.FLOAT, false, 0, 0);
-        gl.bindVertexArray(null);
-      } catch (e) { _bgVAO = null; }
-    }
-  }
-
-  function drawCustomRoomBg(gl) {
-    if (!_bgImageElement) return;
-    initBgRenderer(gl);
-    if (!_bgShader) return;
-
-    if (_bgTextureNeedsUpdate) {
-      _bgTextureNeedsUpdate = false;
-      if (!_bgTexture) _bgTexture = gl.createTexture();
-      gl.bindTexture(gl.TEXTURE_2D, _bgTexture);
-      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, _bgImageElement);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-      gl.bindTexture(gl.TEXTURE_2D, null);
-    }
-    if (!_bgTexture) return;
-
-    var prevProg = gl.getParameter(gl.CURRENT_PROGRAM);
-    var prevBuf = gl.getParameter(gl.ARRAY_BUFFER_BINDING);
-    var prevActTex = gl.getParameter(gl.ACTIVE_TEXTURE);
-    var prevTex = gl.getParameter(gl.TEXTURE_BINDING_2D);
-    var prevBlend = gl.isEnabled(gl.BLEND);
-    var prevDepth = gl.isEnabled(gl.DEPTH_TEST);
-    var prevScissor = gl.isEnabled(gl.SCISSOR_TEST);
-    var prevCull = gl.isEnabled(gl.CULL_FACE);
-    var prevMask = gl.getParameter(gl.COLOR_WRITEMASK);
-    var prevVAO = (typeof gl.bindVertexArray === "function") ? gl.getParameter(gl.VERTEX_ARRAY_BINDING) : null;
-
-    gl.disable(gl.BLEND);
-    gl.disable(gl.DEPTH_TEST);
-    gl.disable(gl.SCISSOR_TEST);
-    gl.disable(gl.CULL_FACE);
-    gl.colorMask(true, true, true, true);
-
-    gl.useProgram(_bgShader.prog);
-    gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, _bgTexture);
-    gl.uniform1i(_bgShader.u_t, 0);
-
-    if (_bgVAO && typeof gl.bindVertexArray === "function") {
-      gl.bindVertexArray(_bgVAO);
-      gl.drawArrays(gl.TRIANGLES, 0, 6);
-      gl.bindVertexArray(prevVAO);
+  if (_customRoomBg) {
+    if (document.readyState !== "loading") {
+      applyRoomBgDiv(_customRoomBg);
     } else {
-      gl.bindBuffer(gl.ARRAY_BUFFER, _bgQuadBuffer);
-      gl.enableVertexAttribArray(_bgShader.a_p);
-      gl.vertexAttribPointer(_bgShader.a_p, 2, gl.FLOAT, false, 0, 0);
-      gl.drawArrays(gl.TRIANGLES, 0, 6);
-      gl.disableVertexAttribArray(_bgShader.a_p);
-      gl.bindBuffer(gl.ARRAY_BUFFER, prevBuf);
+      document.addEventListener("DOMContentLoaded", function () {
+        applyRoomBgDiv(_customRoomBg);
+      });
     }
-
-    gl.activeTexture(prevActTex);
-    gl.bindTexture(gl.TEXTURE_2D, prevTex);
-    gl.useProgram(prevProg);
-    gl.colorMask(prevMask[0], prevMask[1], prevMask[2], prevMask[3]);
-    if (prevBlend) gl.enable(gl.BLEND);
-    if (prevDepth) gl.enable(gl.DEPTH_TEST);
-    if (prevScissor) gl.enable(gl.SCISSOR_TEST);
-    if (prevCull) gl.enable(gl.CULL_FACE);
+    // Also retry once game canvas appears
+    var _bgInitInterval = setInterval(function () {
+      var cv = document.getElementById("canvas");
+      if (cv && cv.parentNode) {
+        applyRoomBgDiv(_customRoomBg);
+        clearInterval(_bgInitInterval);
+      }
+    }, 200);
   }
 
   function compressAndProcessImage(fileOrBlob, maxWidth, maxHeight, quality, callback) {
@@ -159,9 +90,9 @@
             var c = document.createElement("canvas");
             c.width = targetW;
             c.height = targetH;
-            var ctx = c.getContext("2d");
+            var ctx2d = c.getContext("2d");
 
-            // Cover fit (center & crop if needed without distortion)
+            // Cover fit: fill full 1080×1920 with cropped image
             var imgW = img.width;
             var imgH = img.height;
             var scale = Math.max(targetW / imgW, targetH / imgH);
@@ -170,7 +101,7 @@
             var drawX = (targetW - drawW) / 2;
             var drawY = (targetH - drawH) / 2;
 
-            ctx.drawImage(img, drawX, drawY, drawW, drawH);
+            ctx2d.drawImage(img, drawX, drawY, drawW, drawH);
             var compressedDataUrl = c.toDataURL("image/jpeg", quality || 0.85);
             callback(null, compressedDataUrl);
           } catch (err) {
@@ -191,31 +122,51 @@
     }
   }
 
+  /* ── WebGL transparency hook ──
+     Force alpha:true on the game canvas WebGL context.
+     Then intercept clearColor: when the game sets it to black (room bg),
+     we override it to rgba(0,0,0,0) so the canvas is transparent there,
+     revealing the DOM div behind it. Sprites draw at full alpha=1 on top.
+  */
   try {
     var _origGetContext = HTMLCanvasElement.prototype.getContext;
     HTMLCanvasElement.prototype.getContext = function (type, attrs) {
       var isGameCanvas = this && (this.id === "canvas" || (this.classList && this.classList.contains("emscripten")));
+      // Force alpha:true for the game canvas WebGL context
+      if (isGameCanvas && typeof type === "string" && type.indexOf("webgl") !== -1) {
+        var newAttrs = {};
+        if (attrs && typeof attrs === "object") {
+          for (var k in attrs) {
+            if (Object.prototype.hasOwnProperty.call(attrs, k)) newAttrs[k] = attrs[k];
+          }
+        }
+        newAttrs.alpha = true;
+        newAttrs.premultipliedAlpha = false;
+        attrs = newAttrs;
+      }
       var ctx = _origGetContext.call(this, type, attrs);
       if (isGameCanvas && ctx && !ctx._dm_bg_hooked && typeof ctx.clearColor === "function") {
         ctx._dm_bg_hooked = true;
+        var _gl = ctx;
         var _origClearColor = ctx.clearColor.bind(ctx);
-        var _origClear = ctx.clear.bind(ctx);
+        var _origColorMask = ctx.colorMask.bind(ctx);
+        var _roomIsClear = false;
 
         ctx.clearColor = function (r, g, b, a) {
-          _lastClearWasBlack = (r < 0.08 && g < 0.08 && b < 0.08);
+          if (window._digibara_custom_room_bg && r < 0.08 && g < 0.08 && b < 0.08) {
+            _roomIsClear = true;
+            return _origClearColor(0, 0, 0, 0);
+          }
+          _roomIsClear = false;
           return _origClearColor(r, g, b, a);
         };
 
-        ctx.clear = function (mask) {
-          var res = _origClear(mask);
-          if (window._digibara_custom_room_bg && _lastClearWasBlack && !_drawnThisFrame && (mask & 16384)) {
-            var vp = ctx.getParameter(ctx.VIEWPORT);
-            if (vp && vp[2] >= 300 && vp[3] >= 300) {
-              _drawnThisFrame = true;
-              try { drawCustomRoomBg(ctx); } catch (e) { console.warn(e); }
-            }
+        // Ensure the alpha channel is always written when doing a room clear
+        ctx.colorMask = function (r, g, b, a) {
+          if (window._digibara_custom_room_bg && _roomIsClear) {
+            return _origColorMask(r, g, b, true);
           }
-          return res;
+          return _origColorMask(r, g, b, a);
         };
       }
       return ctx;
@@ -1888,18 +1839,9 @@
         console.warn("Storage quota exceeded", ex);
       }
       _customRoomBg = url;
-      window._digibara_custom_room_bg = true;
       loadCustomRoomBgImage(url);
       updatePreview(url);
-
-      ensureBackgroundBlackInSave().then(function (changed) {
-        if (changed) {
-          alert("✓ Custom room background active! Reloading to switch room render mode...");
-          setTimeout(function () { window.location.reload(); }, 600);
-        } else {
-          alert("✓ Custom room background applied directly behind character!");
-        }
-      });
+      alert("✓ Custom room background applied! It will appear behind the character in-game.\nIf you don't see it yet, reload the page once.");
     }
 
     function clearCustomRoomBg() {
