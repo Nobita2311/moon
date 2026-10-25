@@ -35,13 +35,13 @@
     if (cv && cv.style.display === "block" && (!sp || sp.style.display === "none" || sp.hidden)) {
       setTimeout(function () {
         _gameReady = true;
-      }, 1000);
+      }, 500);
       return;
     }
     requestAnimationFrame(monitorGameLoad);
   }
   requestAnimationFrame(monitorGameLoad);
-  setTimeout(function () { _gameReady = true; }, 6000);
+  setTimeout(function () { _gameReady = true; }, 3000);
 
   function loadCustomRoomBgImage(url) {
     if (!url) {
@@ -231,9 +231,8 @@
         ctx.clear = function (mask) {
           var res = _origClear(mask);
           if (_gameReady && window._digibara_custom_room_bg && !_drawnThisFrame && (mask & 16384)) {
-            var fbo = null;
-            try { fbo = ctx.getParameter(ctx.FRAMEBUFFER_BINDING); } catch (e) {}
-            if (!fbo && _savedClearColor[0] < 0.08 && _savedClearColor[1] < 0.08 && _savedClearColor[2] < 0.08) {
+            var vp = ctx.getParameter(ctx.VIEWPORT);
+            if (vp && vp[2] >= 300 && vp[3] >= 300 && _savedClearColor[0] < 0.08 && _savedClearColor[1] < 0.08 && _savedClearColor[2] < 0.08) {
               _drawnThisFrame = true;
               try { drawCustomRoomBg(ctx); } catch (e) { console.warn(e); }
             }
@@ -1905,6 +1904,7 @@
 
     function setCustomRoomBg(url) {
       if (!url) return;
+      _gameReady = true;
       try {
         localStorage.setItem("dm_custom_room_bg", url);
       } catch (ex) {
