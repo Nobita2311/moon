@@ -218,6 +218,9 @@
     HTMLCanvasElement.prototype.getContext = function (type, attrs) {
       var isGameCanvas = this && (this.id === "canvas" || (this.classList && this.classList.contains("emscripten")));
       var ctx = _origGetContext.call(this, type, attrs);
+      if (isGameCanvas && ctx) {
+        window._digibara_gl = ctx;
+      }
       if (isGameCanvas && ctx && !ctx._dm_bg_hooked && typeof ctx.clearColor === "function") {
         ctx._dm_bg_hooked = true;
         var _origClearColor = ctx.clearColor.bind(ctx);
@@ -241,6 +244,248 @@
         };
       }
       return ctx;
+    };
+  } catch (e) {}
+
+  /* ═══════════════════════════════════════════════════════════════
+     §0B BODY & ASSET ALIGNMENT ENGINE (Nudge & Real-Time Fixes)
+     ═══════════════════════════════════════════════════════════════ */
+  var _assetOffsets = {};
+  try { _assetOffsets = JSON.parse(localStorage.getItem("dm_asset_offsets") || "{}"); } catch (e) {}
+  var _anchorOffsets = {};
+  try { _anchorOffsets = JSON.parse(localStorage.getItem("dm_anchor_offsets") || "{}"); } catch (e) {}
+
+  var _loadedAssetImages = {};
+  var _activeGlTextures = [];
+  var _registeredSpriteKeys = {};
+  var _currentNudgeStep = 5;
+  var _activeAlignTarget = "dick_idle";
+
+  var BODY_PART_DEFINITIONS = [
+    { id: "dick_idle", name: "🍆 Dick (Idle)", group: "Genitalia", pattern: /dick_idle/i },
+    { id: "dick_horny", name: "🍆 Dick (Horny / Erect)", group: "Genitalia", pattern: /dick_horny/i },
+    { id: "dick_foreskin", name: "🍆 Dick Foreskin", group: "Genitalia", pattern: /dick_foreskin/i },
+    { id: "balls_left", name: "🥚 Left Ball (Testicle)", group: "Genitalia", pattern: /balls_left/i },
+    { id: "balls_right", name: "🥚 Right Ball (Testicle)", group: "Genitalia", pattern: /balls_right/i },
+
+    { id: "belly_big", name: "🍈 Big Belly", group: "Torso & Rear", pattern: /belly_big/i },
+    { id: "belly_small", name: "🍈 Small Belly", group: "Torso & Rear", pattern: /belly_small/i },
+    { id: "body_idle", name: "👤 Body Base (Torso)", group: "Torso & Rear", pattern: /body_idle/i },
+    { id: "butt_cheek_left", name: "🍑 Left Butt Cheek", group: "Torso & Rear", pattern: /butt_cheek_left/i },
+    { id: "butt_cheek_right", name: "🍑 Right Butt Cheek", group: "Torso & Rear", pattern: /butt_cheek_right/i },
+    { id: "butt_hole", name: "🕳 Butt Hole", group: "Torso & Rear", pattern: /butt_hole/i },
+    { id: "butt_background", name: "🍑 Butt Background", group: "Torso & Rear", pattern: /butt_background/i },
+    { id: "foot_idle", name: "🦶 Feet / Legs", group: "Torso & Rear", pattern: /foot_idle/i },
+
+    { id: "eyes_idle", name: "👁 Eyes (Idle)", group: "Face", pattern: /eyes_idle/i },
+    { id: "eyes_horny", name: "👁 Eyes (Horny)", group: "Face", pattern: /eyes_horny/i },
+    { id: "mouth_idle", name: "👄 Mouth (Idle)", group: "Face", pattern: /mouth_idle/i },
+    { id: "mouth_speak", name: "👄 Mouth (Speaking)", group: "Face", pattern: /mouth_speak/i },
+    { id: "mouth_horny", name: "👄 Mouth (Horny)", group: "Face", pattern: /mouth_horny/i },
+    { id: "mouth_tired", name: "👄 Mouth (Tired)", group: "Face", pattern: /mouth_tired/i },
+
+    { id: "outfit", name: "👕 Main Outfit", group: "Outfits", pattern: /outfit(?:\.|\_1)/i },
+    { id: "outfit_2", name: "👕 Outfit 2", group: "Outfits", pattern: /outfit_2/i },
+    { id: "outfit_3", name: "👕 Outfit 3", group: "Outfits", pattern: /outfit_3/i },
+
+    { id: "nipple_left_position", name: "🍼 Left Nipple / Milking Tube", group: "Attachments & Anchors", isAnchor: true, def: [370, 790] },
+    { id: "nipple_right_position", name: "🍼 Right Nipple / Milking Tube", group: "Attachments & Anchors", isAnchor: true, def: [700, 790] },
+    { id: "armpit_left_position", name: "💪 Left Armpit Suction", group: "Attachments & Anchors", isAnchor: true, def: [160, 789] },
+    { id: "armpit_right_position", name: "💪 Right Armpit Suction", group: "Attachments & Anchors", isAnchor: true, def: [920, 789] },
+    { id: "dick_top_position", name: "⚡ Dick Top / Dildos / Toys", group: "Attachments & Anchors", isAnchor: true, def: [210, 863] },
+    { id: "mouth_center_position", name: "🎭 Mouth Center / Mask", group: "Attachments & Anchors", isAnchor: true, def: [550, 423] }
+  ];
+
+  function getMatchingDef(str) {
+    if (!str) return null;
+    for (var i = 0; i < BODY_PART_DEFINITIONS.length; i++) {
+      var d = BODY_PART_DEFINITIONS[i];
+      if (d.pattern && d.pattern.test(str)) return d;
+      if (d.id === str) return d;
+    }
+    return null;
+  }
+
+  function getAssetOffset(keyOrPath) {
+    if (_assetOffsets[keyOrPath]) return _assetOffsets[keyOrPath];
+    var def = getMatchingDef(keyOrPath);
+    if (def && _assetOffsets[def.id]) return _assetOffsets[def.id];
+    return { x: 0, y: 0 };
+  }
+
+  function setAssetOffset(keyOrPath, off) {
+    var def = getMatchingDef(keyOrPath);
+    var id = def ? def.id : keyOrPath;
+    _assetOffsets[id] = { x: off.x || 0, y: off.y || 0 };
+    _assetOffsets[keyOrPath] = _assetOffsets[id];
+  }
+
+  function isAnchorId(id) {
+    var def = getMatchingDef(id);
+    return !!(def && def.isAnchor);
+  }
+
+  function getAnchorCoords(id) {
+    if (_anchorOffsets[id]) return _anchorOffsets[id];
+    var def = getMatchingDef(id);
+    if (def && def.def) return [def.def[0], def.def[1]];
+    return [0, 0];
+  }
+
+  function setAnchorCoords(id, coords) {
+    _anchorOffsets[id] = [coords[0], coords[1]];
+  }
+
+  function trackActiveTexture(tex, w, h) {
+    if (!tex) return;
+    for (var i = 0; i < _activeGlTextures.length; i++) {
+      if (_activeGlTextures[i].tex === tex) {
+        _activeGlTextures[i].w = w;
+        _activeGlTextures[i].h = h;
+        return;
+      }
+    }
+    _activeGlTextures.push({ tex: tex, w: w, h: h });
+    if (_activeGlTextures.length > 60) _activeGlTextures.shift();
+  }
+
+  function applyLiveTextureNudge(targetKey, off) {
+    var asset = _loadedAssetImages[targetKey];
+    if (!asset) {
+      var def = getMatchingDef(targetKey);
+      if (def) asset = _loadedAssetImages[def.id];
+    }
+    if (!asset || !asset.img) return;
+    var w = asset.w || asset.img.width;
+    var h = asset.h || asset.img.height;
+    if (!w || !h) return;
+
+    var c = document.createElement("canvas");
+    c.width = w;
+    c.height = h;
+    var ctx2d = c.getContext("2d");
+    ctx2d.clearRect(0, 0, w, h);
+    ctx2d.drawImage(asset.img, off.x || 0, off.y || 0);
+
+    var gl = window._digibara_gl;
+    if (gl) {
+      var prevTex = gl.getParameter(gl.TEXTURE_BINDING_2D);
+      for (var i = 0; i < _activeGlTextures.length; i++) {
+        var entry = _activeGlTextures[i];
+        if (entry.w === w && entry.h === h && entry.tex) {
+          try {
+            gl.bindTexture(gl.TEXTURE_2D, entry.tex);
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, c);
+          } catch (e) {}
+        }
+      }
+      if (prevTex) gl.bindTexture(gl.TEXTURE_2D, prevTex);
+    }
+  }
+
+  // Intercept images in Emscripten Module.preloadPlugins
+  try {
+    window.Module = window.Module || {};
+    window.Module.preloadPlugins = window.Module.preloadPlugins || [];
+    window.Module.preloadPlugins.unshift({
+      canHandle: function (filename) {
+        return !window.Module.sm && /\.(jpg|jpeg|png|bmp)$/i.test(filename);
+      },
+      handle: function (bytes, filename, successCb, errorCb) {
+        try {
+          var blob = new Blob([bytes], { type: "image/png" });
+          var url = URL.createObjectURL(blob);
+          var img = new Image();
+          img.onload = function () {
+            URL.revokeObjectURL(url);
+            _loadedAssetImages[filename] = { img: img, w: img.width, h: img.height, rawBytes: bytes, filename: filename };
+            var def = getMatchingDef(filename);
+            if (def) {
+              _loadedAssetImages[def.id] = _loadedAssetImages[filename];
+            }
+            if (window._digibara_update_align_ui) {
+              window._digibara_update_align_ui();
+            }
+
+            var off = getAssetOffset(filename);
+            if (off && (off.x !== 0 || off.y !== 0)) {
+              try {
+                var c = document.createElement("canvas");
+                c.width = img.width;
+                c.height = img.height;
+                var ctx2d = c.getContext("2d");
+                ctx2d.clearRect(0, 0, img.width, img.height);
+                ctx2d.drawImage(img, off.x, off.y);
+                c.toBlob(function (shiftedBlob) {
+                  if (shiftedBlob) {
+                    shiftedBlob.arrayBuffer().then(function (buf) {
+                      successCb(new Uint8Array(buf));
+                    }).catch(function () { successCb(bytes); });
+                  } else {
+                    successCb(bytes);
+                  }
+                }, "image/png");
+                return;
+              } catch (e) {
+                console.warn(e);
+              }
+            }
+            successCb(bytes);
+          };
+          img.onerror = function () {
+            URL.revokeObjectURL(url);
+            if (errorCb) errorCb();
+          };
+          img.src = url;
+        } catch (ex) {
+          successCb(bytes);
+        }
+      }
+    });
+  } catch (e) {}
+
+  // WebGL texImage2D hook to track texture dimensions
+  try {
+    var _origTexImage2D = WebGLRenderingContext.prototype.texImage2D;
+    WebGLRenderingContext.prototype.texImage2D = function () {
+      var res = _origTexImage2D.apply(this, arguments);
+      try {
+        if (arguments.length >= 9) {
+          var target = arguments[0];
+          var w = arguments[3];
+          var h = arguments[4];
+          if (target === this.TEXTURE_2D && w > 64 && h > 64) {
+            var boundTex = this.getParameter(this.TEXTURE_BINDING_2D);
+            if (boundTex) {
+              boundTex._dm_w = w;
+              boundTex._dm_h = h;
+              trackActiveTexture(boundTex, w, h);
+            }
+          }
+        }
+      } catch (ex) {}
+      return res;
+    };
+  } catch (e) {}
+
+  // Console hook for [CHAR] Loaded key
+  try {
+    var _origConsoleLog = console.log;
+    console.log = function () {
+      try {
+        var first = arguments[0];
+        if (typeof first === "string" && first.indexOf("[CHAR]") !== -1) {
+          var m = first.match(/\[CHAR\] Loaded key="([^"]+)"/);
+          if (m && m[1]) {
+            var key = m[1];
+            _registeredSpriteKeys[key] = true;
+            if (window._digibara_update_align_ui) {
+              window._digibara_update_align_ui();
+            }
+          }
+        }
+      } catch (e) {}
+      return _origConsoleLog.apply(console, arguments);
     };
   } catch (e) {}
 
@@ -1552,6 +1797,16 @@
       ".dm-msg-err{background:#3a1520;color:var(--dm-red);border:1px solid rgba(248,113,113,.3)}",
       ".dm-msg-info{background:var(--dm-bg2);color:var(--dm-gold);border:1px solid rgba(255,217,138,.2)}",
       "#dm-se small{display:block;font-size:11px;color:var(--dm-muted);margin:3px 0 0;line-height:1.4}",
+
+      /* Body & Asset Alignment Tool */
+      ".dm-nudge-btn{width:46px;height:42px;border-radius:10px;border:1px solid var(--dm-border);background:var(--dm-bg2);color:var(--dm-text);font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s;user-select:none;-webkit-user-select:none;touch-action:manipulation}",
+      ".dm-nudge-btn:hover{background:var(--dm-bg3);border-color:var(--dm-accent);transform:translateY(-1px)}",
+      ".dm-nudge-btn:active{background:var(--dm-accent);color:#fff;transform:translateY(1px)}",
+      ".dm-nudge-center{width:40px;height:40px;border-radius:8px;border:1px solid var(--dm-border);background:var(--dm-bg3);color:var(--dm-gold);font-size:16px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s}",
+      ".dm-nudge-center:hover{background:rgba(255,217,138,.2);border-color:var(--dm-gold)}",
+      ".dm-step-btn{padding:4px 9px;font-size:11px;font-weight:700;border-radius:6px;border:1px solid var(--dm-border);background:var(--dm-bg2);color:var(--dm-muted);cursor:pointer;transition:all .15s}",
+      ".dm-step-btn:hover{color:var(--dm-text);background:var(--dm-bg3)}",
+      ".dm-step-btn.active{background:var(--dm-accent);color:#fff;border-color:var(--dm-accent)}",
     ].join("\n");
     document.head.appendChild(s);
   }
@@ -1758,6 +2013,53 @@
       "      <input type='checkbox' id='dm-canvas-glow'>" +
       "      <span class='dm-slider'></span>" +
       "    </label>" +
+      "  </div>" +
+      "</div>" +
+
+      /* Section 6: Body & Asset Alignment Tool */
+      "<div class='dm-section'>" +
+      "  <div class='dm-sec-title'>🎯 Body &amp; Asset Alignment Tool</div>" +
+      "  <p style='font-size:11px;color:var(--dm-muted);margin:0 0 10px;line-height:1.4'>" +
+      "    Nudge and fix broken or misaligned body parts, outfits, and anchor attachments in real time." +
+      "  </p>" +
+
+      "  <div style='background:var(--dm-bg2);border:1px solid var(--dm-border);border-radius:8px;padding:10px;margin-bottom:10px'>" +
+      "    <div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:6px'>" +
+      "      <span style='font-size:11px;font-weight:700;color:var(--dm-accent)'>Select Body Part / Asset:</span>" +
+      "      <span id='dm-align-detected-count' style='font-size:10px;color:var(--dm-green);font-weight:600'>Live</span>" +
+      "    </div>" +
+      "    <select id='dm-align-select' style='width:100%;box-sizing:border-box;padding:8px;border-radius:6px;background:var(--dm-bg3);color:var(--dm-text);border:1px solid var(--dm-border);font-size:12px;font-weight:600'>" +
+      "    </select>" +
+
+      "    <div style='display:flex;justify-content:space-between;align-items:center;margin-top:8px;padding:6px 10px;background:rgba(0,0,0,0.3);border-radius:6px;font-size:11px'>" +
+      "      <span style='color:var(--dm-muted)'>Current Offset:</span>" +
+      "      <span id='dm-align-coords' style='font-family:monospace;font-weight:700;color:var(--dm-gold)'>X: 0px | Y: 0px</span>" +
+      "    </div>" +
+      "  </div>" +
+
+      "  <div style='display:flex;align-items:center;justify-content:space-between;margin-bottom:10px'>" +
+      "    <span style='font-size:11px;color:var(--dm-muted)'>Nudge Step:</span>" +
+      "    <div id='dm-align-steps' style='display:flex;gap:4px'>" +
+      "      <button type='button' class='dm-step-btn' data-step='1'>1px</button>" +
+      "      <button type='button' class='dm-step-btn active' data-step='5'>5px</button>" +
+      "      <button type='button' class='dm-step-btn' data-step='10'>10px</button>" +
+      "      <button type='button' class='dm-step-btn' data-step='25'>25px</button>" +
+      "    </div>" +
+      "  </div>" +
+
+      "  <div style='display:flex;flex-direction:column;align-items:center;gap:6px;margin:12px 0'>" +
+      "    <button type='button' id='dm-nudge-up' class='dm-nudge-btn' title='Nudge Up'>⬆️</button>" +
+      "    <div style='display:flex;align-items:center;gap:8px'>" +
+      "      <button type='button' id='dm-nudge-left' class='dm-nudge-btn' title='Nudge Left'>⬅️</button>" +
+      "      <button type='button' id='dm-nudge-reset' class='dm-nudge-center' title='Reset selected part to 0,0'>⟲</button>" +
+      "      <button type='button' id='dm-nudge-right' class='dm-nudge-btn' title='Nudge Right'>➡️</button>" +
+      "    </div>" +
+      "    <button type='button' id='dm-nudge-down' class='dm-nudge-btn' title='Nudge Down'>⬇️</button>" +
+      "  </div>" +
+
+      "  <div style='display:flex;gap:6px;margin-top:10px'>" +
+      "    <button type='button' id='dm-align-save' class='dm-btn dm-btn-primary' style='flex:1;font-size:11px;padding:8px'>💾 Save Offsets</button>" +
+      "    <button type='button' id='dm-align-reset-all' class='dm-btn dm-btn-danger' style='font-size:11px;padding:8px'>↩ Reset All</button>" +
       "  </div>" +
       "</div>";
 
@@ -2014,6 +2316,195 @@
         }).catch(function (err) {
           alert("Could not update background directly: " + err.message + "\nTip: Open Save Editor first to load save.");
         });
+      };
+    }
+
+    /* ── Section 6: Body & Asset Alignment Tool Wiring ── */
+    var alignSelect = panel.querySelector("#dm-align-select");
+    var alignCoords = panel.querySelector("#dm-align-coords");
+    var stepBtns    = panel.querySelectorAll(".dm-step-btn");
+    var nudgeUp     = panel.querySelector("#dm-nudge-up");
+    var nudgeDown   = panel.querySelector("#dm-nudge-down");
+    var nudgeLeft   = panel.querySelector("#dm-nudge-left");
+    var nudgeRight  = panel.querySelector("#dm-nudge-right");
+    var nudgeReset  = panel.querySelector("#dm-nudge-reset");
+    var alignSave   = panel.querySelector("#dm-align-save");
+    var alignResetAll = panel.querySelector("#dm-align-reset-all");
+    var detectedCount = panel.querySelector("#dm-align-detected-count");
+
+    function updateCoordsDisplay() {
+      if (!alignSelect || !alignCoords) return;
+      var key = alignSelect.value;
+      if (isAnchorId(key)) {
+        var c = getAnchorCoords(key);
+        alignCoords.textContent = "Pos: [" + c[0] + ", " + c[1] + "]";
+        alignCoords.style.color = "var(--dm-gold)";
+      } else {
+        var off = getAssetOffset(key);
+        var signX = off.x > 0 ? "+" : "";
+        var signY = off.y > 0 ? "+" : "";
+        alignCoords.textContent = "X: " + signX + off.x + "px | Y: " + signY + off.y + "px";
+        alignCoords.style.color = (off.x !== 0 || off.y !== 0) ? "var(--dm-green)" : "var(--dm-gold)";
+      }
+    }
+
+    function populateAlignDropdown() {
+      if (!alignSelect) return;
+      var curVal = alignSelect.value || _activeAlignTarget;
+      var groups = {
+        "Genitalia": [],
+        "Torso & Rear": [],
+        "Face": [],
+        "Outfits": [],
+        "Attachments & Anchors": [],
+        "✨ Detected / Custom Sprites": []
+      };
+
+      BODY_PART_DEFINITIONS.forEach(function (def) {
+        var g = def.group || "Other";
+        if (!groups[g]) groups[g] = [];
+        groups[g].push(def);
+      });
+
+      Object.keys(_loadedAssetImages).forEach(function (fn) {
+        if (!getMatchingDef(fn)) {
+          var name = fn.split("/").pop();
+          groups["✨ Detected / Custom Sprites"].push({ id: fn, name: name });
+        }
+      });
+      Object.keys(_registeredSpriteKeys).forEach(function (k) {
+        if (!getMatchingDef(k)) {
+          groups["✨ Detected / Custom Sprites"].push({ id: k, name: k });
+        }
+      });
+
+      var html = "";
+      Object.keys(groups).forEach(function (gName) {
+        var list = groups[gName];
+        if (list && list.length > 0) {
+          html += "<optgroup label='" + gName + "'>";
+          list.forEach(function (item) {
+            html += "<option value='" + item.id + "'>" + item.name + "</option>";
+          });
+          html += "</optgroup>";
+        }
+      });
+      alignSelect.innerHTML = html;
+      if (curVal) alignSelect.value = curVal;
+      updateCoordsDisplay();
+
+      if (detectedCount) {
+        var total = Object.keys(_loadedAssetImages).length;
+        if (total > 0) {
+          detectedCount.textContent = "✓ " + total + " Loaded";
+        }
+      }
+    }
+
+    window._digibara_update_align_ui = populateAlignDropdown;
+    populateAlignDropdown();
+
+    if (alignSelect) {
+      alignSelect.onchange = function () {
+        _activeAlignTarget = alignSelect.value;
+        updateCoordsDisplay();
+      };
+    }
+
+    stepBtns.forEach(function (btn) {
+      btn.onclick = function () {
+        stepBtns.forEach(function (b) { b.classList.remove("active"); });
+        btn.classList.add("active");
+        _currentNudgeStep = parseInt(btn.getAttribute("data-step"), 10) || 5;
+      };
+    });
+
+    function doNudge(dx, dy) {
+      if (!alignSelect) return;
+      var key = alignSelect.value;
+      if (isAnchorId(key)) {
+        var coords = getAnchorCoords(key);
+        coords[0] += dx;
+        coords[1] += dy;
+        setAnchorCoords(key, coords);
+        updateCoordsDisplay();
+      } else {
+        var off = getAssetOffset(key);
+        off.x += dx;
+        off.y += dy;
+        setAssetOffset(key, off);
+        applyLiveTextureNudge(key, off);
+        updateCoordsDisplay();
+      }
+    }
+
+    if (nudgeUp) nudgeUp.onclick = function () { doNudge(0, -_currentNudgeStep); };
+    if (nudgeDown) nudgeDown.onclick = function () { doNudge(0, _currentNudgeStep); };
+    if (nudgeLeft) nudgeLeft.onclick = function () { doNudge(-_currentNudgeStep, 0); };
+    if (nudgeRight) nudgeRight.onclick = function () { doNudge(_currentNudgeStep, 0); };
+
+    if (nudgeReset) {
+      nudgeReset.onclick = function () {
+        if (!alignSelect) return;
+        var key = alignSelect.value;
+        if (isAnchorId(key)) {
+          var def = getMatchingDef(key);
+          if (def && def.def) setAnchorCoords(key, [def.def[0], def.def[1]]);
+        } else {
+          setAssetOffset(key, { x: 0, y: 0 });
+          applyLiveTextureNudge(key, { x: 0, y: 0 });
+        }
+        updateCoordsDisplay();
+      };
+    }
+
+    if (alignSave) {
+      alignSave.onclick = function () {
+        try {
+          localStorage.setItem("dm_asset_offsets", JSON.stringify(_assetOffsets));
+          localStorage.setItem("dm_anchor_offsets", JSON.stringify(_anchorOffsets));
+        } catch (e) {}
+
+        // Persist to characters_web.save in IndexedDB if present
+        readFromSavedata("characters_web.save").then(function (bytes) {
+          try {
+            var text = new TextDecoder("utf-8").decode(bytes);
+            var updated = false;
+            Object.keys(_anchorOffsets).forEach(function (prop) {
+              var reg = new RegExp('("' + prop + '"\\s*:\\s*\\[)[^\\]]+(\\])', 'g');
+              var newCoords = _anchorOffsets[prop];
+              if (reg.test(text)) {
+                text = text.replace(reg, '$1' + newCoords[0] + ', ' + newCoords[1] + '$2');
+                updated = true;
+              }
+            });
+            if (updated) {
+              var newBytes = new TextEncoder().encode(text);
+              writeToSavedata("characters_web.save", newBytes);
+            }
+          } catch (ex) {}
+        }).catch(function () {});
+
+        alert("✓ Offsets saved permanently! They will remain applied across reloads.");
+      };
+    }
+
+    if (alignResetAll) {
+      alignResetAll.onclick = function () {
+        if (!confirm("Reset all body part and anchor offsets back to default?")) return;
+        _assetOffsets = {};
+        _anchorOffsets = {};
+        try {
+          localStorage.removeItem("dm_asset_offsets");
+          localStorage.removeItem("dm_anchor_offsets");
+        } catch (e) {}
+        BODY_PART_DEFINITIONS.forEach(function (def) {
+          if (!def.isAnchor) {
+            applyLiveTextureNudge(def.id, { x: 0, y: 0 });
+          }
+        });
+        updateCoordsDisplay();
+        alert("✓ All body offsets reset to default!");
       };
     }
     } catch (e) {
