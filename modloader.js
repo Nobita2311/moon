@@ -895,11 +895,6 @@
         "  <button type='button' id='se-unlock-outfits-modules' class='dm-btn-se dm-btn-se-secondary'>👗 Unlock ALL Outfits &amp; Modules (0-199)</button>" +
         "</div>" +
 
-        "<div class='se-section-title' style='margin-top:16px'>🖼️ Backgrounds &amp; Shop Unlocker</div>" +
-        "<div class='dm-btn-row' style='margin-bottom:10px'>" +
-        "  <button type='button' id='se-unlock-bg' class='dm-btn-se dm-btn-se-primary' style='background:linear-gradient(135deg,#059669,#10b981)'>🖼️ Unlock All Backgrounds &amp; Set Max Cash ($999M)</button>" +
-        "</div>" +
-
         "<div class='dm-char-grid-unlock'>" +
         OFFICIAL_CHARACTERS.map(function (oc) {
           var cd = data.characters_data[oc.id];
@@ -955,26 +950,6 @@
           stampCharUnlock(data.characters_data[cid]);
         });
         setMsg("✓ All outfits (indices 0-199) and all modules unlocked for all characters!", "ok");
-      };
-
-      box.querySelector("#se-unlock-bg").onclick = function () {
-        data.money = Math.max(data.money || 0, 999999999);
-        var ALL_BGS = [
-          "Background 0", "Background 1", "Background 2", "Background 3",
-          "Background 4", "Background 5", "Background 6", "Background 7",
-          "Background 8", "Background 9", "Background 10", "Background Black"
-        ];
-        if (Array.isArray(data.inventory)) {
-          ALL_BGS.forEach(function (bg) {
-            if (data.inventory.indexOf(bg) === -1) data.inventory.push(bg);
-          });
-        }
-        Object.keys(data.characters_data || {}).forEach(function (cid) {
-          if (!data.characters_data[cid].equipped_background) {
-            data.characters_data[cid].equipped_background = "Background 10";
-          }
-        });
-        setMsg("✓ Cash set to $999M! You can now buy all Backgrounds in the shop instantly.", "ok");
       };
 
       OFFICIAL_CHARACTERS.forEach(function (oc) {
@@ -1130,20 +1105,6 @@
         numField("se-weight",    "Weight (kg)", c.weight  || 70, "", [{ label: "65", val: 65, mode: "set" }, { label: "80", val: 80, mode: "set" }]) +
         "</div>" +
 
-        "<div class='se-section-title' style='margin-top:14px'>🖼️ Room Background</div>" +
-        "<div class='dm-char-picker' style='margin-bottom:10px'>" +
-        "  <label for='se-char-bg'>Equipped Background:</label>" +
-        "  <select id='se-char-bg' style='width:100%;padding:7px;border-radius:6px;background:var(--dm-bg2);color:var(--dm-text);border:1px solid var(--dm-border);font-size:12px'>" +
-        [
-          "Background 0", "Background 1", "Background 2", "Background 3",
-          "Background 4", "Background 5", "Background 6", "Background 7",
-          "Background 8", "Background 9", "Background 10", "Background Black"
-        ].map(function (bg) {
-          return "<option value='" + bg + "'" + ((c.equipped_background === bg) ? " selected" : "") + ">" + bg + "</option>";
-        }).join("") +
-        "  </select>" +
-        "</div>" +
-
         "<div class='se-section-title' style='margin-top:14px'>🔓 Unlock Status</div>" +
         toggle("se-char-unlocked", "Character Unlocked",   !!(c.unlocked)) +
         toggle("se-char-imported", "Imported Character",    !!(c.imported)) +
@@ -1213,8 +1174,6 @@
       c.unlocked              = b("se-char-unlocked", c.unlocked);
       c.imported              = b("se-char-imported", c.imported);
       c.is_premium            = b("se-char-premium",  c.is_premium);
-      var bgEl                = box.querySelector("#se-char-bg");
-      if (bgEl && bgEl.value) c.equipped_background = bgEl.value;
     }
 
     /* ── TAB 4: RAW JSON VIEW ── */
@@ -1543,12 +1502,48 @@
       "  </div>" +
       "</div>" +
 
-      /* Section 6: Backgrounds & Visual Themes */
+      /* Section 5: Custom Background & Wallpapers */
       "<div class='dm-section'>" +
-      "  <div class='dm-sec-title'>🎨 Backgrounds &amp; Themes</div>" +
-      "  <div style='font-size:12px;margin-bottom:4px;font-weight:600;color:var(--dm-text)'>Quick Equip Room Background:</div>" +
-      "  <div style='display:flex;gap:6px;margin-bottom:10px'>" +
-      "    <select id='dm-quick-bg' style='flex:1;padding:6px;border-radius:6px;background:var(--dm-bg2);color:var(--dm-text);border:1px solid var(--dm-border);font-size:11px'>" +
+      "  <div class='dm-sec-title'>🖼️ Custom Background</div>" +
+
+      "  <!-- Upload from Phone / Enter URL box -->" +
+      "  <div style='background:var(--dm-bg2);border:1px solid var(--dm-border);border-radius:8px;padding:12px;margin-bottom:12px'>" +
+      "    <div style='font-size:12px;font-weight:700;margin-bottom:4px;color:var(--dm-gold)'>📱 Phone / PC Wallpaper</div>" +
+      "    <p style='font-size:11px;color:var(--dm-muted);margin:0 0 10px;line-height:1.4'>Set any custom photo or wallpaper from your device behind the game.</p>" +
+
+      "    <input type='file' id='dm-bg-file' accept='image/*' style='display:none'>" +
+      "    <div style='display:flex;gap:6px;margin-bottom:8px'>" +
+      "      <button type='button' id='dm-bg-upload-btn' class='dm-btn dm-btn-primary' style='flex:1;font-size:11px;padding:8px 10px'>📁 Upload from Phone</button>" +
+      "      <button type='button' id='dm-bg-clear-btn' class='dm-btn dm-btn-danger' style='font-size:11px;padding:8px 10px'>Reset</button>" +
+      "    </div>" +
+
+      "    <div style='display:flex;gap:6px'>" +
+      "      <input id='dm-custom-bg-url' type='text' placeholder='Or paste image link (https://...)' style='flex:1;min-width:0;box-sizing:border-box;padding:7px 8px;border-radius:6px;background:var(--dm-bg3);color:var(--dm-text);border:1px solid var(--dm-border);font-size:11px'>" +
+      "      <button type='button' id='dm-apply-url-bg' class='dm-btn dm-btn-secondary' style='font-size:11px;padding:7px 12px'>Apply</button>" +
+      "    </div>" +
+
+      "    <div id='dm-bg-preview-wrap' style='display:none;margin-top:10px;align-items:center;gap:10px;padding:8px;background:rgba(0,0,0,.35);border-radius:6px;border:1px solid var(--dm-border)'>" +
+      "      <img id='dm-bg-preview' style='width:42px;height:42px;object-fit:cover;border-radius:6px;border:1px solid var(--dm-accent)'>" +
+      "      <div style='flex:1;font-size:11px'>" +
+      "        <span style='color:var(--dm-green);font-weight:700;display:block'>✓ Custom Wallpaper Active</span>" +
+      "        <span style='color:var(--dm-muted);font-size:10px'>Saved &amp; loaded automatically</span>" +
+      "      </div>" +
+      "    </div>" +
+      "  </div>" +
+
+      "  <!-- Theme Presets -->" +
+      "  <div style='font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--dm-accent);margin-bottom:6px'>Presets:</div>" +
+      "  <div style='display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:12px'>" +
+      "    <button type='button' class='dm-btn dm-btn-secondary dm-theme-preset' data-theme='default' style='font-size:11px;padding:6px'>🌌 Dark Void</button>" +
+      "    <button type='button' class='dm-btn dm-btn-secondary dm-theme-preset' data-theme='cyberpunk' style='font-size:11px;padding:6px'>⚡ Cyberpunk</button>" +
+      "    <button type='button' class='dm-btn dm-btn-secondary dm-theme-preset' data-theme='galaxy' style='font-size:11px;padding:6px'>✨ Deep Galaxy</button>" +
+      "    <button type='button' class='dm-btn dm-btn-secondary dm-theme-preset' data-theme='sunset' style='font-size:11px;padding:6px'>🌇 Tokyo Sunset</button>" +
+      "  </div>" +
+
+      "  <!-- In-game room background quick equip -->" +
+      "  <div style='font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--dm-accent);margin-bottom:6px'>In-Game Room Background:</div>" +
+      "  <div style='display:flex;gap:6px;margin-bottom:12px'>" +
+      "    <select id='dm-quick-bg' style='flex:1;padding:7px;border-radius:6px;background:var(--dm-bg2);color:var(--dm-text);border:1px solid var(--dm-border);font-size:12px'>" +
       [
         "Background 0", "Background 1", "Background 2", "Background 3",
         "Background 4", "Background 5", "Background 6", "Background 7",
@@ -1557,40 +1552,18 @@
         return "<option value='" + bg + "'>" + bg + "</option>";
       }).join("") +
       "    </select>" +
-      "    <button type='button' id='dm-set-bg-btn' class='dm-btn dm-btn-primary' style='padding:6px 10px;font-size:11px'>Equip</button>" +
-      "  </div>" +
-
-      "  <div style='font-size:12px;margin-bottom:4px;font-weight:600;color:var(--dm-text)'>Backdrop Wallpaper:</div>" +
-      "  <select id='dm-backdrop-theme' style='width:100%;padding:6px;border-radius:6px;background:var(--dm-bg2);color:var(--dm-text);border:1px solid var(--dm-border);font-size:11px;margin-bottom:8px'>" +
-      "    <option value='default'>Default (Dark Void)</option>" +
-      "    <option value='cyberpunk'>Cyberpunk Neon</option>" +
-      "    <option value='galaxy'>Deep Galaxy</option>" +
-      "    <option value='sunset'>Tokyo Sunset</option>" +
-      "    <option value='custom'>Custom Image URL</option>" +
-      "  </select>" +
-      "  <div id='dm-custom-url-wrap' style='display:none;margin-bottom:8px'>" +
-      "    <input id='dm-custom-bg-url' type='text' placeholder='https://example.com/wallpaper.png' style='width:100%;box-sizing:border-box;padding:6px 8px;border-radius:6px;background:var(--dm-bg2);color:var(--dm-text);border:1px solid var(--dm-border);font-size:11px'>" +
-      "    <button type='button' id='dm-apply-url-bg' class='dm-btn dm-btn-secondary' style='margin-top:4px;width:100%;font-size:11px'>Apply Image URL</button>" +
+      "    <button type='button' id='dm-set-bg-btn' class='dm-btn dm-btn-primary' style='padding:7px 12px;font-size:12px'>Equip</button>" +
       "  </div>" +
 
       "  <div class='dm-toggle-wrap'>" +
       "    <div class='dm-toggle-info'>" +
       "      <span>Canvas Glow Effect</span>" +
-      "      <small>Surrounds the game canvas with a soft neon aura.</small>" +
+      "      <small>Soft neon aura around the game screen.</small>" +
       "    </div>" +
       "    <label class='dm-switch'>" +
       "      <input type='checkbox' id='dm-canvas-glow'>" +
       "      <span class='dm-slider'></span>" +
       "    </label>" +
-      "  </div>" +
-
-      "  <div style='margin-top:10px;padding-top:8px;border-top:1px solid var(--dm-border)'>" +
-      "    <div style='font-size:11px;font-weight:600;color:var(--dm-muted);margin-bottom:4px'>Live Background Module Info:</div>" +
-      "    <div id='dm-bg-status' style='font-size:11px;color:var(--dm-muted);line-height:1.4;margin-bottom:6px'>" +
-      "      ⏳ Equip a Background module in-game to inspect parameters." +
-      "    </div>" +
-      "    <div id='dm-bg-params' style='display:none'></div>" +
-      "    <button type='button' id='dm-bg-refresh' class='dm-btn dm-btn-secondary' style='font-size:10px;padding:4px 8px'>🔍 Check Module Params</button>" +
       "  </div>" +
       "</div>";
 
@@ -1744,11 +1717,14 @@
       };
     }
 
-    /* ── Backdrop theme & glow wiring ── */
-    var backdropSelect = panel.querySelector("#dm-backdrop-theme");
-    var customUrlWrap  = panel.querySelector("#dm-custom-url-wrap");
+    /* ── Custom Background, Upload, URL, Presets & Glow wiring ── */
+    var uploadBtn      = panel.querySelector("#dm-bg-upload-btn");
+    var fileInput      = panel.querySelector("#dm-bg-file");
+    var clearBtn       = panel.querySelector("#dm-bg-clear-btn");
     var customUrlInput = panel.querySelector("#dm-custom-bg-url");
     var applyUrlBtn    = panel.querySelector("#dm-apply-url-bg");
+    var previewWrap    = panel.querySelector("#dm-bg-preview-wrap");
+    var previewImg     = panel.querySelector("#dm-bg-preview");
     var glowToggle     = panel.querySelector("#dm-canvas-glow");
 
     var THEMES = {
@@ -1758,11 +1734,16 @@
       sunset:    "radial-gradient(circle at 50% 40%, #3e1b2f 0%, #0d0614 100%)"
     };
 
-    function applyBackdrop(theme, customUrl) {
-      if (theme === "custom" && customUrl) {
-        document.body.style.background = "url('" + customUrl + "') center / cover no-repeat fixed #060612";
-      } else if (THEMES[theme]) {
-        document.body.style.background = THEMES[theme];
+    function applyBg(bgVal, isImage) {
+      if (isImage && bgVal) {
+        document.body.style.background = "url('" + bgVal + "') center / cover no-repeat fixed #060612";
+        if (previewWrap) {
+          previewWrap.style.display = "flex";
+          if (previewImg) previewImg.src = bgVal;
+        }
+      } else {
+        document.body.style.background = THEMES[bgVal] || THEMES.default;
+        if (previewWrap) previewWrap.style.display = "none";
       }
     }
 
@@ -1778,35 +1759,79 @@
       }
     }
 
+    // Load saved background on startup
     try {
+      var savedImg   = localStorage.getItem("dm_custom_bg");
       var savedTheme = localStorage.getItem("dm_backdrop_theme") || "default";
-      var savedUrl   = localStorage.getItem("dm_backdrop_url") || "";
       var savedGlow  = localStorage.getItem("dm_canvas_glow") === "1";
-      if (backdropSelect) backdropSelect.value = savedTheme;
-      if (customUrlInput) customUrlInput.value = savedUrl;
-      if (customUrlWrap) customUrlWrap.style.display = (savedTheme === "custom" ? "block" : "none");
+      if (savedImg) {
+        applyBg(savedImg, true);
+        if (customUrlInput && /^https?:\/\//.test(savedImg)) customUrlInput.value = savedImg;
+      } else {
+        applyBg(savedTheme, false);
+      }
       if (glowToggle) glowToggle.checked = savedGlow;
-      applyBackdrop(savedTheme, savedUrl);
       setTimeout(function () { applyGlow(savedGlow); }, 1000);
     } catch (e) {}
 
-    if (backdropSelect) {
-      backdropSelect.onchange = function () {
-        var val = backdropSelect.value;
-        if (customUrlWrap) customUrlWrap.style.display = (val === "custom" ? "block" : "none");
-        try { localStorage.setItem("dm_backdrop_theme", val); } catch (e) {}
-        applyBackdrop(val, customUrlInput ? customUrlInput.value : "");
+    // 1. Upload image from phone / device
+    if (uploadBtn && fileInput) {
+      uploadBtn.onclick = function () { fileInput.click(); };
+      fileInput.onchange = function (ev) {
+        var file = ev.target.files && ev.target.files[0];
+        if (!file) return;
+        var reader = new FileReader();
+        reader.onload = function (e) {
+          var dataUrl = e.target.result;
+          try {
+            localStorage.setItem("dm_custom_bg", dataUrl);
+            localStorage.removeItem("dm_backdrop_theme");
+          } catch (ex) {}
+          applyBg(dataUrl, true);
+        };
+        reader.readAsDataURL(file);
       };
     }
 
-    if (applyUrlBtn) {
+    // 2. Apply Image URL
+    if (applyUrlBtn && customUrlInput) {
       applyUrlBtn.onclick = function () {
-        var url = (customUrlInput ? customUrlInput.value.trim() : "");
-        try { localStorage.setItem("dm_backdrop_url", url); } catch (e) {}
-        applyBackdrop("custom", url);
+        var url = customUrlInput.value.trim();
+        if (!url) return;
+        try {
+          localStorage.setItem("dm_custom_bg", url);
+          localStorage.removeItem("dm_backdrop_theme");
+        } catch (ex) {}
+        applyBg(url, true);
       };
     }
 
+    // 3. Reset background to default
+    if (clearBtn) {
+      clearBtn.onclick = function () {
+        try {
+          localStorage.removeItem("dm_custom_bg");
+          localStorage.removeItem("dm_backdrop_theme");
+        } catch (ex) {}
+        if (customUrlInput) customUrlInput.value = "";
+        applyBg("default", false);
+      };
+    }
+
+    // 4. Aesthetic Presets
+    panel.querySelectorAll(".dm-theme-preset").forEach(function (btn) {
+      btn.onclick = function () {
+        var th = btn.getAttribute("data-theme");
+        try {
+          localStorage.removeItem("dm_custom_bg");
+          localStorage.setItem("dm_backdrop_theme", th);
+        } catch (ex) {}
+        if (customUrlInput) customUrlInput.value = "";
+        applyBg(th, false);
+      };
+    });
+
+    // 5. Canvas Glow toggle
     if (glowToggle) {
       glowToggle.onchange = function () {
         var enabled = glowToggle.checked;
