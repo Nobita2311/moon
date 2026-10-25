@@ -232,7 +232,7 @@
           var res = _origClear(mask);
           if (_gameReady && window._digibara_custom_room_bg && !_drawnThisFrame && (mask & 16384)) {
             var vp = ctx.getParameter(ctx.VIEWPORT);
-            if (vp && vp[2] >= 300 && vp[3] >= 300 && _savedClearColor[0] < 0.08 && _savedClearColor[1] < 0.08 && _savedClearColor[2] < 0.08) {
+            if (vp && vp[2] >= 300 && vp[3] >= 300) {
               _drawnThisFrame = true;
               try { drawCustomRoomBg(ctx); } catch (e) { console.warn(e); }
             }
