@@ -150,22 +150,42 @@
       if (isGameCanvas && ctx && !ctx._dm_bg_hooked && typeof ctx.clearColor === "function") {
         ctx._dm_bg_hooked = true;
         var _origClearColor = ctx.clearColor.bind(ctx);
+        var _origClear = ctx.clear.bind(ctx);
+        var _savedClearColor = [0, 0, 0, 1];
 
         ctx.clearColor = function (r, g, b, a) {
-          if (_gameReady && window._digibara_custom_room_bg && r < 0.08 && g < 0.08 && b < 0.08) {
-            // Check that the default screen framebuffer is bound (not offscreen surface/font cache)
+          _savedClearColor = [r, g, b, a];
+          return _origClearColor(r, g, b, a);
+        };
+
+        ctx.clear = function (mask) {
+          if (_gameReady && window._digibara_custom_room_bg && (mask & 16384)) {
             var fbo = null;
             try { fbo = ctx.getParameter(ctx.FRAMEBUFFER_BINDING); } catch (e) {}
-            if (!fbo) {
-              return _origClearColor(0, 0, 0, 0);
+            // Only clear transparent if clearing the main canvas screen and game clear color is dark/black
+            if (!fbo && _savedClearColor[0] < 0.08 && _savedClearColor[1] < 0.08 && _savedClearColor[2] < 0.08) {
+              _origClearColor(0, 0, 0, 0);
+              var res = _origClear(mask);
+              _origClearColor(_savedClearColor[0], _savedClearColor[1], _savedClearColor[2], _savedClearColor[3]);
+              return res;
             }
           }
-          return _origClearColor(r, g, b, a);
+          return _origClear(mask);
         };
       }
       return ctx;
     };
   } catch (e) {}
+
+  // Keep canvas transparent while custom room background is active
+  setInterval(function () {
+    if (window._digibara_custom_room_bg && _customRoomBg) {
+      var cv = document.getElementById("canvas");
+      if (cv && (!cv.style.backgroundImage || cv.style.backgroundColor !== "transparent")) {
+        applyRoomBgToCanvas(_customRoomBg);
+      }
+    }
+  }, 1000);
 
   /* ═══════════════════════════════════════════════════════════════
      §1  VIRTUAL CLOCK (Game Speed Multiplier)
