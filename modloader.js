@@ -132,7 +132,8 @@
     var _origGetContext = HTMLCanvasElement.prototype.getContext;
     HTMLCanvasElement.prototype.getContext = function (type, attrs) {
       var isGameCanvas = this && (this.id === "canvas" || (this.classList && this.classList.contains("emscripten")));
-      // Force alpha:true for the game canvas WebGL context
+      // Force alpha:true for the game canvas WebGL context so transparent
+      // room-clear pixels show the DOM div behind the canvas.
       if (isGameCanvas && typeof type === "string" && type.indexOf("webgl") !== -1) {
         var newAttrs = {};
         if (attrs && typeof attrs === "object") {
@@ -141,7 +142,7 @@
           }
         }
         newAttrs.alpha = true;
-        newAttrs.premultipliedAlpha = false;
+        // Do NOT override premultipliedAlpha — GameMaker needs it at its default
         attrs = newAttrs;
       }
       var ctx = _origGetContext.call(this, type, attrs);
